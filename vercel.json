@@ -1,0 +1,14 @@
+{
+  "version": 2,
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 30
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/report",
+      "schedule": "0 4 * * *"
+    }
+  ]
+}

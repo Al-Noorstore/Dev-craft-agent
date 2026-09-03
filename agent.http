@@ -1,0 +1,190 @@
+# ============================================
+# DEV CRAFT AGENT - VS Code REST Client file
+#
+# USE KA TAREEQA (3 steps):
+# 1. VS Code mein "REST Client" extension install karo (humx.rest-client)
+# 2. Neeche @base_url ko apne Vercel URL se replace karo
+#    (Find & Replace: your-project.vercel.app)
+# 3. Kisi bhi request ke "Send Request" pe click karo (ya Ctrl+Alt+R)
+#
+# Jis request ke upar ### hai, wo alag request hai — jitni marzi chalao!
+# ============================================
+
+@base_url = https://your-project.vercel.app
+@api_key = sk-xxxx   # agar /api/v1 use karna ho to OpenAI key
+
+### ==========================================
+### 1. LIVE CHAT - agent se baat karo (Roman Urdu mein poocho!)
+# ============================================
+POST {{base_url}}/api/chat
+Content-Type: application/json
+
+{
+  "message": "Mujhe Tulsa ke 5 restaurant leads chahiye, unki websites outdated hon"
+}
+
+### ==========================================
+### 2. WEBSITE AUDIT - kisi bhi site ko check karo (FREE!)
+# ==========================================
+POST {{base_url}}/api/audit
+Content-Type: application/json
+
+{
+  "url": "http://www.tciok.com"
+}
+
+### ==========================================
+### 3. BUSINESS SEARCH - Google se leads dhundo
+# ==========================================
+POST {{base_url}}/api/search
+Content-Type: application/json
+
+{
+  "query": "dental clinics in Wichita",
+  "country": "usa"
+}
+
+### ==========================================
+### 4. LEAD SCORING - kitna acha lead hai?
+# ==========================================
+POST {{base_url}}/api/score
+Content-Type: application/json
+
+{
+  "business_name": "Thompson Construction",
+  "category": "construction",
+  "city": "Tulsa",
+  "rating": 4.5,
+  "reviews": 120,
+  "audit_score": 30
+}
+
+### ==========================================
+### 5. EMAIL DRAFT - AI se outreach email likhwao
+# ==========================================
+POST {{base_url}}/api/draft-email
+Content-Type: application/json
+
+{
+  "business_name": "Cambridge Family Dentistry",
+  "category": "dental",
+  "city": "Wichita",
+  "issues": ["no online booking", "dated design", "not mobile friendly"]
+}
+
+### ==========================================
+### 6. SEND EMAIL ( Gmail App Password chahiye )
+# ==========================================
+POST {{base_url}}/api/send-email
+Content-Type: application/json
+
+{
+  "to": "client@example.com",
+  "subject": "Free homepage concept for your clinic",
+  "body": "Aap ka email yahan..."
+}
+
+### ==========================================
+### 7. STRIPE PAYMENT LINK banao (Stripe key chahiye)
+# ==========================================
+POST {{base_url}}/api/stripe-payment
+Content-Type: application/json
+
+{
+  "amount": 299,
+  "product_name": "Business Website Package",
+  "currency": "usd"
+}
+
+### ==========================================
+### 8. WEBSITE CLONE - design reference ke liye (FREE!)
+# ==========================================
+POST {{base_url}}/api/clone-site
+Content-Type: application/json
+
+{
+  "url": "https://example-old-site.com"
+}
+
+### ==========================================
+### 9. FILE TOOLS - CSV parho, zip kholo, PDF, image
+# ==========================================
+POST {{base_url}}/api/files
+Content-Type: application/json
+
+{
+  "action": "csv_parse",
+  "csv": "business,city,score\nThompson Construction,Tulsa,45"
+}
+
+### ==========================================
+### 10. GITHUB - client ke liye repo banao, files push karo
+# ==========================================
+POST {{base_url}}/api/github
+Content-Type: application/json
+
+{
+  "action": "create_repo",
+  "name": "client-website-abc",
+  "private": true,
+  "description": "Client project - Business package"
+}
+
+### ==========================================
+### 11. GOOGLE DRIVE - proposal save karo
+# ==========================================
+POST {{base_url}}/api/drive
+Content-Type: application/json
+
+{
+  "action": "save",
+  "name": "Proposal_Thompson.txt",
+  "content": "Dev Craft Studio - Proposal..."
+}
+
+### ==========================================
+### 12. NOTION - lead entry
+# ==========================================
+POST {{base_url}}/api/notion
+Content-Type: application/json
+
+{
+  "title": "Lead: Cambridge Family Dentistry",
+  "notes": "Score 82, bad website, Wichita"
+}
+
+### ==========================================
+### 13. SLACK / DISCORD - notification bhejo
+# ==========================================
+POST {{base_url}}/api/slack
+Content-Type: application/json
+
+{
+  "text": "New high-priority lead: Cambridge Family Dentistry (score 82)!"
+}
+
+### ==========================================
+### 14. TELEGRAM TEST - bot zinda hai? (GET hai ye)
+# ==========================================
+# Telegram bot ko direct chat karo @YourBotName pe — ye webhook hai
+
+### ==========================================
+### 15. DAILY REPORT - abhi mano (normally roz 9AM khud chalta hai)
+# ==========================================
+GET {{base_url}}/api/report
+
+### ==========================================
+### 16. OPENAI-COMPATIBLE - VS Code AI extensions ke liye!
+# ==========================================
+# Continue / Cline extension mein base URL {{base_url}}/api/v1
+# aur API key OPENAI_API_KEY use karo
+POST {{base_url}}/api/v1/chat/completions
+Content-Type: application/json
+Authorization: Bearer {{api_key}}
+
+{
+  "model": "gpt-4o-mini",
+  "messages": [
+    {"role": "user", "content": "Ek modern dental clinic website ke liye 5 page ka structure batao"}
+  ]
+}
