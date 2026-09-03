@@ -37,6 +37,7 @@ Deploy ke baad apna Vercel URL kholo (phone ya laptop — dono pe perfect):
 | `POST /api/gitlab` | 🦊 GitLab projects + push | GitLab token | Free |
 | `POST /api/clone-site` | 📸 Website clone (single-file zip) | **Kuch nahi!** | Free |
 | `POST /api/files` | 📂 unzip, CSV↔JSON, PDF read, image read (AI) | OpenAI (image only) | Free |
+| `POST /api/exec` | ⚡ Commands run karo | **Self-hosted only!** | Free |
 
 *Stripe: payment tabhi fees jab payment aaye.
 
@@ -76,6 +77,12 @@ Deploy ke baad apna Vercel URL kholo (phone ya laptop — dono pe perfect):
 2. Phir: Stripe (payments) + Supabase (leads)
 3. Phir: Sheets/Notion/Slack/Discord (jaisa pasand ho)
 4. Last mein: WhatsApp (Meta setup lamba hai), Twitter ($100)
+
+## ⚡ Commands run karna (Solene jaisa) — self-hosted only
+- **Vercel pe: NAHI** — cloud pe commands chalana kisi bhi system ke liye open risk hai (isliye default disabled)
+- **Apne PC pe: HAAN!** — `EXEC_ENABLED=true npm run dev` (ya vercel dev) se chalao → `/api/exec` se `ls`, `node`, `git` — sab chalega
+- Dangerous commands (rm -rf /, shutdown) blocked hain
+- Best practice: `EXEC_TOKEN` bhi set karo
 
 ## ⚠️ Website Cloner — Legal Note
 Clone sirf design-reference, backup, ya apni sites ke liye. Kisi ka copyrighted content copy karke apni site banana/ publish karna copyright infringement hai!
