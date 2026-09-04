@@ -217,11 +217,18 @@ const handler = async (req, res) => {
     return res.json({ reply: result.reply || '(khali jawab)', steps: [{ title: '🦙 Local Ollama se jawab (' + chosenModel + ')', status: 'done', detail: device.device_name }], links: [] });
   }
 
+  // ---- provider resolve: openai | openrouter | custom ----
+  let baseURL;
+  if (provider === 'openrouter') baseURL = 'https://openrouter.ai/api/v1';
+  else if (provider === 'custom') {
+    if (!req.body.base_url) return res.status(400).json({ error: 'Custom API ke liye base URL chahiye (Settings mein daalo)' });
+    baseURL = req.body.base_url.replace(/\/+$/, '');
+  }
   const userKey = api_key || process.env.OPENAI_API_KEY;
   if (!userKey) {
-    return res.status(500).json({ error: 'API key missing - Settings (menu > Settings) mein apni personal OpenAI API key paste karo, ya Vercel pe OPENAI_API_KEY set karo.' });
+    return res.status(500).json({ error: 'API key missing - Settings (menu > Settings) mein apni personal API key paste karo (OpenAI / OpenRouter / Custom), ya Vercel pe OPENAI_API_KEY set karo.' });
   }
-  const openai = new OpenAI({ apiKey: userKey });
+  const openai = new OpenAI({ apiKey: userKey, ...(baseURL ? { baseURL } : {}) });
 
   try {
     const steps = [];
@@ -235,7 +242,7 @@ const handler = async (req, res) => {
     let reply = '';
     for (let round = 0; round < 4; round++) {
       const completion = await openai.chat.completions.create({
-        model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+        model: model || process.env.OPENAI_MODEL || (provider === 'openrouter' ? 'openrouter/auto' : 'gpt-4o-mini'),
         messages, tools: TOOLS, max_tokens: 1500,
       });
       const msg = completion.choices[0].message;

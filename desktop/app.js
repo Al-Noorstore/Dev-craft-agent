@@ -98,7 +98,7 @@ async function runTool(name, args, steps) {
 // ---------- chat (OpenAI ya local Ollama) ----------
 async function chat(req, res, body) {
   res.setHeader('Content-Type', 'application/json');
-  const { message, history, api_key, provider, model } = body || {};
+  const { message, history, api_key, provider, model, base_url } = body || {};
   if (!message) return res.end(JSON.stringify({ error: 'message required' }));
   const steps = [];
 
@@ -120,15 +120,20 @@ async function chat(req, res, body) {
     } catch (e) { return res.end(JSON.stringify({ error: 'Ollama nahi chal raha (localhost:11434). ollama.com se install karo ya Settings mein OpenAI key use karo.' })); }
   }
 
-  // ---- OpenAI (personal key) ----
-  if (!api_key) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) mein apni OpenAI API key paste karo, ya Ollama select karo (free).' }));
+  // ---- OpenAI / OpenRouter / Custom (OpenAI-compatible) ----
+  const BRAIN_URL = provider === 'openrouter' ? 'https://openrouter.ai/v1/chat/completions'
+    : provider === 'custom' ? (base_url || '').replace(/\/+$/, '') + '/chat/completions'
+    : 'https://api.openai.com/v1/chat/completions';
+  const brainModel = model || (provider === 'openrouter' ? 'openrouter/auto' : provider === 'custom' ? 'custom-model' : 'gpt-4o-mini');
+  if (!api_key) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) mein apni API key paste karo (OpenAI/OpenRouter/Custom), ya Ollama select karo (free).' }));
+  if (provider === 'custom' && !base_url) return res.end(JSON.stringify({ error: 'Custom API ke liye Base URL Settings mein daalo' }));
   const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
   try {
     let reply = '';
     for (let round = 0; round < 8; round++) {
-      const r = await fetch('https://api.openai.com/v1/chat/completions', {
+      const r = await fetch(BRAIN_URL, {
         method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + api_key },
-        body: JSON.stringify({ model: model || 'gpt-4o-mini', messages, tools: TOOLS, max_tokens: 1600 })
+        body: JSON.stringify({ model: brainModel, messages, tools: TOOLS, max_tokens: 1600 })
       });
       if (!r.ok) { const errTxt = await r.text(); return res.end(JSON.stringify({ error: 'OpenAI error: ' + errTxt.slice(0, 200) })); }
       const d = await r.json();

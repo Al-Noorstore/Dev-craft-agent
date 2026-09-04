@@ -219,9 +219,11 @@
     <div class="set-box">
       <h3>⚙️ Settings</h3>
       <div class="set-label">AI Provider</div>
-      <div class="provider-row">
-        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ OpenAI Cloud</div>
+      <div class="provider-row" style="grid-template-columns:1fr 1fr;gap:8px">
+        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ OpenAI</div>
         <div class="provider-opt" id="prov-ollama" onclick="setProvider('ollama')">🦙 Ollama (PC)</div>
+        <div class="provider-opt" id="prov-openrouter" onclick="setProvider('openrouter')">🔗 OpenRouter</div>
+        <div class="provider-opt" id="prov-custom" onclick="setProvider('custom')">🛠 Custom API</div>
       </div>
       <div id="openaiSet">
         <div class="set-label">Personal API Key</div>
@@ -229,6 +231,23 @@
         <div class="set-hint">Key sirf tumhare browser mein save hoti hai (localStorage) — server pe store nahi hoti. platform.openai.com/api-keys se lo.</div>
         <div class="set-label">Model</div>
         <input type="text" id="setModel" class="set-input" placeholder="gpt-4o-mini">
+      </div>
+      <div id="openrouterSet" style="display:none">
+        <div class="set-label">OpenRouter API Key</div>
+        <input type="password" id="setOrKey" class="set-input" placeholder="sk-or-v1-...">
+        <div class="set-hint">openrouter.ai/keys se free lo. 100+ models ek key se (DeepSeek, Llama, Qwen, GPT...).</div>
+        <div class="set-label">Model</div>
+        <input type="text" id="setOrModel" class="set-input" placeholder="deepseek/deepseek-chat-v3-0324:free">
+        <div class="set-hint">Model list: openrouter.ai/models (e.g. "qwen/qwen3-8b:free")</div>
+      </div>
+      <div id="customSet" style="display:none">
+        <div class="set-label">Base URL</div>
+        <input type="text" id="setBaseUrl" class="set-input" placeholder="https://api.groq.com/openai/v1">
+        <div class="set-hint">Koi bhi OpenAI-compatible API: Groq, Together, Gemini-compat, apna server...</div>
+        <div class="set-label">API Key</div>
+        <input type="password" id="setCustomKey" class="set-input" placeholder="api key">
+        <div class="set-label">Model</div>
+        <input type="text" id="setCustomModel" class="set-input" placeholder="llama-3.1-8b-instant">
       </div>
       <div id="ollamaSet" style="display:none">
         <div class="set-label">Your PC</div>
@@ -451,6 +470,8 @@
     try {
       const payload = { message: text, history: c.messages.slice(-10) };
       if (settings.provider === 'ollama') { payload.provider = 'ollama'; payload.model = settings.ollama_model; payload.device_id = settings.device_id; }
+      else if (settings.provider === 'openrouter') { payload.provider = 'openrouter'; payload.api_key = settings.or_key; payload.model = settings.or_model; }
+      else if (settings.provider === 'custom') { payload.provider = 'custom'; payload.api_key = settings.custom_key; payload.base_url = settings.base_url; payload.model = settings.custom_model; }
       else { if (settings.api_key) payload.api_key = settings.api_key; if (settings.model) payload.model = settings.model; }
       const res = await fetch('/api/chat', {
         method: 'POST',
@@ -514,7 +535,7 @@
   }
 
   // ====== DOWNLOAD APP ======
-  const DESKTOP_ZIP = 'https://base44.app/api/apps/6a9acc86089c2efefd4b0adc/files/mp/public/6a9acc86089c2efefd4b0adc/3eedf8cfc_DevCraft-Desktop-v1.zip';
+  const DESKTOP_ZIP = 'https://base44.app/api/apps/6a9acc86089c2efefd4b0adc/files/mp/public/6a9acc86089c2efefd4b0adc/dea3fb24f_DevCraft-Desktop-v11.zip';
   const DL_GUIDES = {
     windows: { icon: '🪟', name: 'Windows', ver: 'Windows 10 / 11', steps: [
       '<b>Download App</b> button se ZIP download karo (neeche hai)',
@@ -561,7 +582,7 @@
       '</div>' +
       (os === 'mobile'
         ? '<p class="sub" style="margin-top:12px">💡 Mobile pe web version hi best hai — "Add to Home Screen" karo!</p>'
-        : '<a class="dl-btn-big" href="' + DESKTOP_ZIP + '" download="DevCraft-Desktop-v1.zip">⬇️ Download App (v1 — ZIP, ~10 KB)</a>' +
+        : '<a class="dl-btn-big" href="' + DESKTOP_ZIP + '" download="DevCraft-Desktop-v1.1.zip">⬇️ Download App (v1.1 — ZIP, ~11 KB)</a>' +
           '<p class="sub">✅ No installation • Node.js 18+ chahiye (nodejs.org) • Data sirf tumhare PC pe • Free</p>') +
       '<p class="sub" style="margin-top:10px">⚙️ App ke andar Settings mein <b>Ollama (free)</b> ya apni <b>OpenAI key</b> daalna hai — phir agent ready!</p>' +
     '</div>';
@@ -718,16 +739,25 @@
     setProvider(settings.provider || 'openai');
     document.getElementById('setApiKey').value = settings.api_key || '';
     document.getElementById('setModel').value = settings.model || '';
+    document.getElementById('setOrKey').value = settings.or_key || '';
+    document.getElementById('setOrModel').value = settings.or_model || 'deepseek/deepseek-chat-v3-0324:free';
+    document.getElementById('setBaseUrl').value = settings.base_url || '';
+    document.getElementById('setCustomKey').value = settings.custom_key || '';
+    document.getElementById('setCustomModel').value = settings.custom_model || '';
     refreshOllamaModels();
   }
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
 
   function setProvider(prov) {
     settings.provider = prov;
-    document.getElementById('prov-openai').classList.toggle('active', prov === 'openai');
-    document.getElementById('prov-ollama').classList.toggle('active', prov === 'ollama');
+    ['openai','ollama','openrouter','custom'].forEach(p => {
+      const el = document.getElementById('prov-' + p);
+      if (el) el.classList.toggle('active', prov === p);
+    });
     document.getElementById('openaiSet').style.display = prov === 'openai' ? 'block' : 'none';
     document.getElementById('ollamaSet').style.display = prov === 'ollama' ? 'block' : 'none';
+    document.getElementById('openrouterSet').style.display = prov === 'openrouter' ? 'block' : 'none';
+    document.getElementById('customSet').style.display = prov === 'custom' ? 'block' : 'none';
   }
 
   async function refreshOllamaModels() {
@@ -753,6 +783,11 @@
   function saveSettings() {
     settings.api_key = document.getElementById('setApiKey').value.trim();
     settings.model = document.getElementById('setModel').value.trim() || 'gpt-4o-mini';
+    settings.or_key = document.getElementById('setOrKey').value.trim();
+    settings.or_model = document.getElementById('setOrModel').value.trim() || 'deepseek/deepseek-chat-v3-0324:free';
+    settings.base_url = document.getElementById('setBaseUrl').value.trim();
+    settings.custom_key = document.getElementById('setCustomKey').value.trim();
+    settings.custom_model = document.getElementById('setCustomModel').value.trim();
     settings.ollama_model = document.getElementById('setOllamaModel').value || settings.ollama_model;
     localStorage.setItem('dc_settings', JSON.stringify(settings));
     closeSettings();

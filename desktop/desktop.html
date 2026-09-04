@@ -86,9 +86,11 @@
     <div class="set-box">
       <h3>⚙️ Settings</h3>
       <div class="set-label">AI Provider</div>
-      <div class="provider-row">
-        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ OpenAI Key</div>
+      <div class="provider-row" style="grid-template-columns:1fr 1fr">
+        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ OpenAI</div>
         <div class="provider-opt" id="prov-ollama" onclick="setProvider('ollama')">🦙 Ollama (Free)</div>
+        <div class="provider-opt" id="prov-openrouter" onclick="setProvider('openrouter')">🔗 OpenRouter</div>
+        <div class="provider-opt" id="prov-custom" onclick="setProvider('custom')">🛠 Custom</div>
       </div>
       <div id="openaiSet">
         <div class="set-label">OpenAI API Key</div>
@@ -96,6 +98,22 @@
         <div class="set-hint">Key sirf tumhare PC pe (browser localStorage) rehti hai. platform.openai.com/api-keys</div>
         <div class="set-label">Model</div>
         <input type="text" id="setModel" class="set-input" placeholder="gpt-4o-mini">
+      </div>
+      <div id="openrouterSet" style="display:none">
+        <div class="set-label">OpenRouter API Key</div>
+        <input type="password" id="setOrKey" class="set-input" placeholder="sk-or-v1-...">
+        <div class="set-hint">openrouter.ai/keys — 100+ models ek key se (free models bhi)</div>
+        <div class="set-label">Model</div>
+        <input type="text" id="setOrModel" class="set-input" placeholder="deepseek/deepseek-chat-v3-0324:free">
+      </div>
+      <div id="customSet" style="display:none">
+        <div class="set-label">Base URL</div>
+        <input type="text" id="setBaseUrl" class="set-input" placeholder="https://api.groq.com/openai/v1">
+        <div class="set-hint">Koi bhi OpenAI-compatible API (Groq, Together, apna server)</div>
+        <div class="set-label">API Key</div>
+        <input type="password" id="setCustomKey" class="set-input" placeholder="key">
+        <div class="set-label">Model</div>
+        <input type="text" id="setCustomModel" class="set-input" placeholder="llama-3.1-8b-instant">
       </div>
       <div id="ollamaSet" style="display:none">
         <div class="set-label">Ollama Model</div>
@@ -120,6 +138,11 @@
     setProvider(settings.provider);
     document.getElementById('setApiKey').value = settings.api_key || '';
     document.getElementById('setModel').value = settings.model || '';
+    document.getElementById('setOrKey').value = settings.or_key || '';
+    document.getElementById('setOrModel').value = settings.or_model || 'deepseek/deepseek-chat-v3-0324:free';
+    document.getElementById('setBaseUrl').value = settings.base_url || '';
+    document.getElementById('setCustomKey').value = settings.custom_key || '';
+    document.getElementById('setCustomModel').value = settings.custom_model || '';
     fetch('/api/models').then(r => r.json()).then(d => {
       const sel = document.getElementById('setOllamaModel');
       if (d.models && d.models.length) sel.innerHTML = d.models.map(m => '<option value="' + m + '"' + (m === settings.ollama_model ? ' selected' : '') + '>' + m + '</option>').join('');
@@ -129,14 +152,23 @@
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
   function setProvider(p) {
     settings.provider = p;
-    document.getElementById('prov-openai').classList.toggle('active', p === 'openai');
-    document.getElementById('prov-ollama').classList.toggle('active', p === 'ollama');
+    ['openai','ollama','openrouter','custom'].forEach(x => {
+      const el = document.getElementById('prov-' + x);
+      if (el) el.classList.toggle('active', p === x);
+    });
     document.getElementById('openaiSet').style.display = p === 'openai' ? 'block' : 'none';
     document.getElementById('ollamaSet').style.display = p === 'ollama' ? 'block' : 'none';
+    document.getElementById('openrouterSet').style.display = p === 'openrouter' ? 'block' : 'none';
+    document.getElementById('customSet').style.display = p === 'custom' ? 'block' : 'none';
   }
   function saveSettings() {
     settings.api_key = document.getElementById('setApiKey').value.trim();
     settings.model = document.getElementById('setModel').value.trim() || 'gpt-4o-mini';
+    settings.or_key = document.getElementById('setOrKey').value.trim();
+    settings.or_model = document.getElementById('setOrModel').value.trim() || 'deepseek/deepseek-chat-v3-0324:free';
+    settings.base_url = document.getElementById('setBaseUrl').value.trim();
+    settings.custom_key = document.getElementById('setCustomKey').value.trim();
+    settings.custom_model = document.getElementById('setCustomModel').value.trim();
     settings.ollama_model = document.getElementById('setOllamaModel').value || 'llama3.2';
     localStorage.setItem('dcd_settings', JSON.stringify(settings));
     closeSettings();
@@ -177,7 +209,10 @@
     chat.appendChild(t);
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history: history.slice(-10), provider: settings.provider, model: settings.provider === 'ollama' ? settings.ollama_model : settings.model, api_key: settings.api_key })
+        body: JSON.stringify({ message: text, history: history.slice(-10), provider: settings.provider,
+          model: settings.provider === 'ollama' ? settings.ollama_model : (settings.provider === 'openrouter' ? settings.or_model : (settings.provider === 'custom' ? settings.custom_model : settings.model)),
+          api_key: settings.provider === 'openrouter' ? settings.or_key : (settings.provider === 'custom' ? settings.custom_key : settings.api_key),
+          base_url: settings.base_url })
       });
       const d = await res.json();
       t.remove();
