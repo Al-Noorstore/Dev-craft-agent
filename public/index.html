@@ -339,6 +339,8 @@
     const text = input.value.trim();
     if (!text || busy) return;
     if (!current()) newChat();
+    const welcomeEl = chat.querySelector('.welcome');
+    if (welcomeEl) welcomeEl.remove();
     input.value = '';
     input.style.height = 'auto';
     addMsg(text, 'user');
