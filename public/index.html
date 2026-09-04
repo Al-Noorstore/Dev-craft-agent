@@ -195,7 +195,7 @@
   function renderChat() {
     const c = current();
     chat.innerHTML = '';
-    document.getElementById('chatTitle').textContent = c ? c.title : 'Dev Craft Agent';
+    // header title stays fixed as brand name; sidebar shows per-chat titles
     if (!c || !c.messages.length) {
       chat.innerHTML = `<div class="welcome">
         <div class="welcome-logo">${BOLT_SVG.replace('width="14" height="14"', 'width="30" height="30"')}</div>
@@ -343,7 +343,7 @@
     input.style.height = 'auto';
     addMsg(text, 'user');
     const c = current();
-    if (c.title === 'New Chat') { c.title = text.slice(0, 32) + (text.length > 32 ? '...' : ''); renderSidebar(); document.getElementById('chatTitle').textContent = c.title; }
+    if (c.title === 'New Chat') { c.title = text.slice(0, 32) + (text.length > 32 ? '...' : ''); renderSidebar(); }
 
     busy = true;
     const typingRow = document.createElement('div');
