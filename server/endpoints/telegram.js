@@ -15,12 +15,14 @@ Reply in the same language the user writes in (English, Urdu, or Roman Urdu).
 Be short and helpful. You help with: websites, pricing, proposals, questions about the agency's services.
 Never guarantee sales or revenue. Never send spam content.`;
 
+const vault = require('../lib/credentials.js');
+
 module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).end();
 
   try {
     const body = req.body;
-    const token = process.env.TELEGRAM_BOT_TOKEN;
+    const token = await vault.getCredential('TELEGRAM_BOT_TOKEN');
     if (!token) return res.sendStatus(200);
 
     const msg = body.message;

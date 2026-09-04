@@ -8,6 +8,8 @@
 //   github.com > Settings > Developer settings > Personal access tokens > Fine-grained
 //   Permissions: Repositories (read/write), Contents (read/write)
 // ============================================
+const vault = require('../lib/credentials.js');
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -17,7 +19,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
   try {
-    const TOKEN = process.env.GITHUB_TOKEN;
+    const TOKEN = await vault.getCredential('GITHUB_TOKEN');
     if (!TOKEN) {
       return res.status(500).json({
         error: 'GitHub not configured',

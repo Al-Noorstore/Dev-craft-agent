@@ -42,6 +42,49 @@ function killProcess(name) {
   return sh('pkill -f "' + n + '"', 10000);
 }
 
+// ---------- LOCAL CREDENTIAL VAULT (Solene-style) ----------
+// Tokens ~/.dev-craft/credentials.json mein save hote hain
+// (user ka apna PC - jaise .env file, permissions 0600).
+const VAULT_DIR = path.join(os.homedir(), '.dev-craft');
+const VAULT_FILE = path.join(VAULT_DIR, 'credentials.json');
+
+function vaultLoad() {
+  try { return JSON.parse(fs.readFileSync(VAULT_FILE, 'utf8')); } catch (e) { return {}; }
+}
+function vaultSave(data) {
+  fs.mkdirSync(VAULT_DIR, { recursive: true });
+  fs.writeFileSync(VAULT_FILE, JSON.stringify(data, null, 2), 'utf8');
+  try { fs.chmodSync(VAULT_FILE, 0o600); } catch (e) {}
+}
+function vaultMask(v) {
+  const s = String(v || '');
+  return s.length <= 8 ? (s ? '••••' : '') : s.slice(0, 4) + '••••' + s.slice(-4);
+}
+function vaultSet(name, value, description) {
+  const d = vaultLoad();
+  const n = String(name || '').toUpperCase().trim();
+  if (!n || !value) return { error: 'name aur value dono chahiye' };
+  d[n] = { value: String(value), description: description || null, updated_at: new Date().toISOString() };
+  vaultSave(d);
+  return { ok: true, saved: n, masked: vaultMask(value) };
+}
+function vaultDel(name) {
+  const d = vaultLoad();
+  const n = String(name || '').toUpperCase().trim();
+  if (!d[n]) return { error: n + ' vault mein nahi hai' };
+  delete d[n]; vaultSave(d);
+  return { ok: true, deleted: n };
+}
+function vaultList() {
+  const d = vaultLoad();
+  return { credentials: Object.keys(d).map(k => ({ name: k, description: d[k].description, masked: d[k].value ? vaultMask(d[k].value) : '', updated_at: d[k].updated_at })) };
+}
+function vaultGet(name) { const d = vaultLoad(); return (d[String(name || '').toUpperCase().trim()] || {}).value || null; }
+// commands mein {{GITHUB_TOKEN}} jaise placeholders ko asli values se replace karo
+function vaultExpand(cmd) {
+  return String(cmd || '').replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (m, n) => vaultGet(n) || m);
+}
+
 // ---------- TOOLS (OpenClaw powers) ----------
 const TOOLS = [
   { type: 'function', function: { name: 'run_command', description: 'Laptop ke terminal mein koi bhi command chalao (npm, git, dir/ls, ping, python - anything). Output wapas milta hai.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'terminal command' }, cwd: { type: 'string', description: 'working directory (optional)' } }, required: ['command'] } } },
@@ -54,6 +97,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'close_app', description: 'App band karo (process kill). Process name do, e.g. "notepad", "chrome", "vlc".', parameters: { type: 'object', properties: { process_name: { type: 'string' } }, required: ['process_name'] } } },
   { type: 'function', function: { name: 'youtube', description: 'YouTube control karo: search, video open, ya YouTube band karo.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['search', 'open', 'close'], description: 'search = YouTube pe search karo (query do), open = video/channel URL kholo (url do), close = YouTube browser tab/app band' }, query: { type: 'string' }, url: { type: 'string' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'system_info', description: 'PC ki info: OS, RAM, disk, current user, IP', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'credential_save', description: 'User ka API token/key/password local vault mein save karo (~/.dev-craft/credentials.json). User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'UPPERCASE naam, e.g. GITHUB_TOKEN, OPENAI_API_KEY' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string' } }, required: ['name', 'value'] } } },
+  { type: 'function', function: { name: 'credential_list', description: 'Saare saved tokens ki masked list (values nahi dikhti)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'credential_delete', description: 'Saved token delete karo. Pehle user se confirm karo.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
   { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } }
 ];
@@ -68,7 +114,8 @@ RULES:
 4. Commands ke liye OS ke mutabiq commands use karo (Windows: dir, taskkill; Linux/Mac: ls, pkill). User ka OS: __OS__.
 5. Har tool ke result ke baad chhota summary do. Final reply concise rakho.
 6. YouTube search: youtube tool {action:"search", query}. App kholna: open_app. Band karna: close_app (process name).
-7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).\n9. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
+7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).\n9. CREDENTIALS SKILL (Solene-style): user jo bhi token/key de (GitHub, OpenAI, Stripe...) turant credential_save se save karo. "mere tokens dikhao" => credential_list, "hatao" => credential_delete (confirm pehle). Saved token kisi command mein chahiye to {{NAME}} placeholder use karo, e.g. git push ke liye: run_command "git push https://x-access-token:{{GITHUB_TOKEN}}@github.com/user/repo.git" - placeholder khud replace hota hai. Token kabhi plain reply mein mat likhna - sirf masked (pehle 4 + aakhri 4 chars).
+\n10. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
 
 function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
 
@@ -76,7 +123,7 @@ function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '
 async function runTool(name, args, steps) {
   let title = name, result = {};
   try {
-    if (name === 'run_command') { title = '⌨ Terminal: ' + String(args.command || '').slice(0, 50); result = await sh(args.command, (args.timeout || 60) * 1000); }
+    if (name === 'run_command') { const cmd = vaultExpand(args.command); title = '⌨ Terminal: ' + String(args.command || '').slice(0, 50); result = await sh(cmd, (args.timeout || 60) * 1000); }
     else if (name === 'file_write') { fs.mkdirSync(path.dirname(args.path), { recursive: true }); fs.writeFileSync(args.path, args.content || '', 'utf8'); result = { ok: true, saved: args.path }; title = '📝 File likhi: ' + path.basename(args.path); }
     else if (name === 'file_read') { result = { content: fs.readFileSync(args.path, 'utf8').slice(0, 8000) }; title = '📖 File padhi: ' + path.basename(args.path); }
     else if (name === 'file_list') { const list = fs.readdirSync(args.path).slice(0, 200).map(f => { try { return f + (fs.statSync(path.join(args.path, f)).isDirectory() ? '/' : ''); } catch { return f; } }); result = { files: list }; title = '📂 Folder dekha: ' + path.basename(args.path || args.path); }
@@ -92,6 +139,9 @@ async function runTool(name, args, steps) {
       else if (args.action === 'open') { result = await openTarget(args.url || 'https://youtube.com'); title = '📺 YouTube khola'; }
       else { result = await killProcess(IS_WIN ? 'chrome' : 'firefox'); title = '📺 YouTube/browser band'; }
     }
+    else if (name === 'credential_save') { result = vaultSet(args.name, args.value, args.description); title = '🔐 Token save: ' + String(args.name || '').toUpperCase(); }
+    else if (name === 'credential_list') { result = vaultList(); title = '🗂 Tokens list'; }
+    else if (name === 'credential_delete') { result = vaultDel(args.name); title = '🗑 Token delete: ' + String(args.name || '').toUpperCase(); }
     else if (name === 'system_info') { result = { os: os.type() + ' ' + os.release(), hostname: os.hostname(), user: os.userInfo().username, cpu: os.cpus()[0] && os.cpus()[0].model, ram_gb: Math.round(os.totalmem() / 1024 / 1024 / 1024), freemem_gb: Math.round(os.freemem() / 1024 / 1024 / 1024), uptime_h: Math.round(os.uptime() / 3600) }; title = '💻 System info'; }
     else if (name === 'android_project') {
       const home = os.homedir();
@@ -332,6 +382,16 @@ async function selfTest() {
     assert(r1.ok && r3.ok, 'folder ops fail');
     return 'ok';
   });
+  await T('credential vault (save/list/get/delete + placeholder)', async () => {
+    vaultSet('TEST_TOKEN', 'ghp_abcd12345678efgh', 'self-test');
+    const lst = vaultList();
+    assert(lst.credentials.some(c => c.name === 'TEST_TOKEN' && c.masked.includes('••••')), 'list/mask fail');
+    assert(vaultGet('TEST_TOKEN') === 'ghp_abcd12345678efgh', 'get fail');
+    assert(vaultExpand('echo {{TEST_TOKEN}}') === 'echo ghp_abcd12345678efgh', 'placeholder fail');
+    const del = vaultDel('TEST_TOKEN');
+    assert(del.ok && vaultGet('TEST_TOKEN') === null, 'delete fail');
+    return 'vault ok';
+  });
   await T('system_info', async () => {
     const steps = [];
     const r = JSON.parse(await runTool('system_info', {}, steps));
@@ -361,6 +421,7 @@ if (process.argv.includes('--test')) { selfTest(); return; }
 
 http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
+  if (req.method === 'GET' && req.url === '/api/credentials') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(vaultList())); }
   if (req.method === 'POST') {
     let buf = '';
     req.on('data', c => buf += c);
@@ -372,6 +433,14 @@ http.createServer((req, res) => {
         catch (e) { return res.end(JSON.stringify({ models: [] })); }
       }
       if (req.url === '/api/ping') return res.end(JSON.stringify({ ok: true, app: 'Dev Craft Desktop v1', os: os.type() }));
+      if (req.url === '/api/credentials') {
+        res.setHeader('Content-Type', 'application/json');
+        const b = body || {};
+        if (b.action === 'list' || !b.action) return res.end(JSON.stringify(vaultList()));
+        if (b.action === 'save') return res.end(JSON.stringify(vaultSet(b.name, b.value, b.description)));
+        if (b.action === 'delete') return res.end(JSON.stringify(vaultDel(b.name)));
+        return res.end(JSON.stringify({ error: 'action: save | list | delete' }));
+      }
       res.statusCode = 404; res.end('{}');
     });
     return;

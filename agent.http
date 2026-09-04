@@ -188,3 +188,18 @@ Authorization: Bearer {{api_key}}
     {"role": "user", "content": "Ek modern dental clinic website ke liye 5 page ka structure batao"}
   ]
 }
+
+### 🔐 TOKEN VAULT - save / list / delete
+POST {{base}}/api/credentials
+Content-Type: application/json
+
+{"action":"save","name":"GITHUB_TOKEN","value":"ghp_yourtoken","description":"Wishal ka GitHub token"}
+
+###
+GET {{base}}/api/credentials
+
+###
+POST {{base}}/api/credentials
+Content-Type: application/json
+
+{"action":"delete","name":"GITHUB_TOKEN"}

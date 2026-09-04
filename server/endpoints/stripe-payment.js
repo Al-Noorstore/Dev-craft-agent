@@ -5,6 +5,8 @@
 // IMPORTANT RULE: Link tum khud bana kar khud approve kar ke bhejo!
 // Requires: STRIPE_SECRET_KEY - https://dashboard.stripe.com/apikeys (test mode pehle!)
 // ============================================
+const vault = require('../lib/credentials.js');
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -16,7 +18,8 @@ module.exports = async (req, res) => {
   try {
     const { amount, product_name, currency, description } = req.body || {};
     if (!amount || amount <= 0) return res.status(400).json({ error: 'amount required (dollars, e.g. 299)' });
-    if (!process.env.STRIPE_SECRET_KEY) {
+    const VAULT_STRIPE_KEY = await vault.getCredential('STRIPE_SECRET_KEY');
+    if (!VAULT_STRIPE_KEY) {
       return res.status(500).json({ error: 'STRIPE_SECRET_KEY env var missing (set it in Vercel)' });
     }
 
@@ -32,7 +35,7 @@ module.exports = async (req, res) => {
     const stripeRes = await fetch('https://api.stripe.com/v1/checkout/sessions', {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer ' + process.env.STRIPE_SECRET_KEY,
+        Authorization: 'Bearer ' + VAULT_STRIPE_KEY,
         'Content-Type': 'application/x-www-form-urlencoded'
       },
       body: params

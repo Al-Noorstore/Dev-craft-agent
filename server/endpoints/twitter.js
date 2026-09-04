@@ -6,6 +6,8 @@
 // NOTE: X API free tier mein search NAHI milta — sirf Basic+ plan pe.
 // Free alternative: LinkedIn/Google manually, ya /api/search use karo)
 // ============================================
+const vault = require('../lib/credentials.js');
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -17,7 +19,8 @@ module.exports = async (req, res) => {
   try {
     const { query, max_results } = req.body || {};
     if (!query) return res.status(400).json({ error: 'query required, e.g. "need a web designer"' });
-    if (!process.env.TWITTER_BEARER_TOKEN) {
+    const VAULT_TWITTER_TOKEN = await vault.getCredential('TWITTER_BEARER_TOKEN');
+    if (!VAULT_TWITTER_TOKEN) {
       return res.status(500).json({
         error: 'Twitter not configured',
         setup_help: 'developer.x.com > app banao > Bearer Token lo. DHYAAN: search API ke liye Basic plan ($100/month) chahiye — free tier mein search nahi milta!'
@@ -30,7 +33,7 @@ module.exports = async (req, res) => {
       '&tweet.fields=created_at,author_id,public_metrics';
 
     const twRes = await fetch(url, {
-      headers: { Authorization: 'Bearer ' + process.env.TWITTER_BEARER_TOKEN }
+      headers: { Authorization: 'Bearer ' + VAULT_TWITTER_TOKEN }
     });
     const data = await twRes.json();
     if (!twRes.ok) throw new Error(data.title ? (data.title + ': ' + (data.detail || '')) : 'Twitter error');

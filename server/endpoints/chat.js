@@ -8,6 +8,7 @@
 // POST { "message": "...", "history": [...] } => { reply, steps, links }
 // ============================================
 const OpenAI = require('openai');
+const vault = require('../lib/credentials.js');
 
 const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft Studio, a web design & web app agency run by Wishal (a student developer from Pakistan).
 
@@ -39,6 +40,13 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 5. build_and_deploy(project_name, index_html) - write a complete static website (single index.html with inline CSS/JS) and deploy it LIVE to Vercel. Returns the live URL. Use when user asks to build/deploy a site or wants a free homepage concept.
 6. read_emails(max, classify) - read inbox replies and classify them.
 
+## CREDENTIALS SKILL (Solene-style - token par kaam karna):
+- User jo bhi API token/key/credentials chat mein de (ya "token save karo" bole), TURANT save_credential se save karo. Name UPPERCASE standard: GITHUB_TOKEN, GITLAB_TOKEN, NOTION_TOKEN, TELEGRAM_BOT_TOKEN, STRIPE_SECRET_KEY, TWITTER_BEARER_TOKEN, GITHUB/GITLAB/STRIPE waghera.
+- "mere tokens dikhao" => list_credentials. "ye token hatao" => delete_credential (pehle confirm karo).
+- Save hone par user ko bolo: "encrypted ho kar save ho gaya ✅ (main sirf masked dikha sakta hoon)". Token kabhi wapas plain text mein mat likhna - sirf pehle 4 aur aakhri 4 characters.
+- Jab bhi kisi tool mein token chahiye (GitHub repo banana, Notion entry, Stripe link, Telegram), PEHLE check karo - saved credential hota to khud use karo aur user ko bolna nahi padta. Vault empty ho to user se token maango.
+- SECURITY: tokens chat log mein store nahi hote tumhare, sirf vault mein encrypted. User ka token kisi third party ko kabhi mat dena.
+
 ## AGENCY RULES:
 - Lead strategy: established business + weak website = hot lead (dental, restaurants, construction, law firms, salons).
 - Outreach: honest emails, "free homepage concept" offer. Never spam.
@@ -66,6 +74,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'clone_site', description: 'Website ka design/HTML clone karke zip banata hai (sirf reference ke liye)', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
   { type: 'function', function: { name: 'build_and_deploy', description: 'Ek complete static website deploy karke Vercel pe LIVE karo. Live URL milta hai. SIRF tab use karo jab user ne EXPLICITLY hosting/deploy/live karne ko kaha ho - warna sirf code likh ke do aur poocho.', parameters: { type: 'object', properties: { project_name: { type: 'string', description: 'lowercase-dashes, e.g. client-restaurant-site' }, index_html: { type: 'string', description: 'COMPLETE index.html content' } }, required: ['project_name', 'index_html'] } } },
   { type: 'function', function: { name: 'read_emails', description: 'Inbox ke latest replies padho aur classify karo', parameters: { type: 'object', properties: { max: { type: 'number' }, classify: { type: 'boolean' } } } } },
+  { type: 'function', function: { name: 'save_credential', description: 'User ka API token/key/password encrypted vault mein save karo. User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'standard env-style naam, e.g. GITHUB_TOKEN' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string', description: 'chhoti note (optional)' } }, required: ['name', 'value'] } } },
+  { type: 'function', function: { name: 'list_credentials', description: 'Saare saved tokens ki masked list dikhao (values nahi dikhti)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'delete_credential', description: 'Saved token ko vault se hatao. Pehle user se confirm karo.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
   { type: 'function', function: { name: 'create_automation', description: 'Ek scheduled automation save karo - jo roz 9 AM PKT khud chalegi. prompt = poora kaam jo karna hai (agent khud execute karega, tools ke saath).', parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam, e.g. roz-leads-dhundo' }, prompt: { type: 'string', description: 'poora kaam jo har roz karna hai' }, schedule: { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'abhi sirf daily support hai' } }, required: ['name', 'prompt'] } } },
   { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
@@ -103,8 +114,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -179,6 +190,9 @@ async function runTool(name, args, steps) {
     if (result === null) return JSON.stringify({ error: 'PC se jawab nahi aaya (timeout) - bridge chal raha hai? command: ' + args.command });
     return JSON.stringify(result);
   }
+  if (name === 'save_credential') { epName = null; const r = await vault.saveCredential(args.name, args.value, args.description); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : (r.saved + ' ' + (r.masked || '')); return JSON.stringify(r); }
+  if (name === 'list_credentials') { epName = null; const r = await vault.listCredentials(); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.credentials || []).length + ' saved'); return JSON.stringify(r); }
+  if (name === 'delete_credential') { epName = null; const r = await vault.deleteCredential(args.name); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'deleted'; return JSON.stringify(r); }
   if (name === 'list_automations') { epName = 'automations'; body = { action: 'list' }; }
   if (name === 'delete_automation') { epName = 'automations'; body = { action: 'delete', id: args.id }; }
   const r = await callEndpoint(epName, body);

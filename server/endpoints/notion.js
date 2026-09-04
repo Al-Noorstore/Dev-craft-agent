@@ -7,6 +7,8 @@
 //   2. Notion mein database banao > ... menu > Connections > apna integration add karo
 //   3. NOTION_TOKEN + NOTION_DATABASE_ID (URL se — 32-char string)
 // ============================================
+const vault = require('../lib/credentials.js');
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -18,7 +20,9 @@ module.exports = async (req, res) => {
   try {
     const { title, notes, status } = req.body || {};
     if (!title) return res.status(400).json({ error: 'title is required' });
-    if (!process.env.NOTION_TOKEN || !process.env.NOTION_DATABASE_ID) {
+    const VAULT_NOTION_TOKEN = await vault.getCredential('NOTION_TOKEN');
+    const VAULT_NOTION_DB = await vault.getCredential('NOTION_DATABASE_ID');
+    if (!VAULT_NOTION_TOKEN || !VAULT_NOTION_DB) {
       return res.status(500).json({
         error: 'Notion not configured',
         setup_help: 'notion.so/my-integrations > token lo, database banao, integration ko database se connect karo, NOTION_TOKEN + NOTION_DATABASE_ID set karo.'
@@ -28,12 +32,12 @@ module.exports = async (req, res) => {
     const notionRes = await fetch('https://api.notion.com/v1/pages', {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer ' + process.env.NOTION_TOKEN,
+        Authorization: 'Bearer ' + VAULT_NOTION_TOKEN,
         'Notion-Version': '2022-06-28',
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        parent: { database_id: process.env.NOTION_DATABASE_ID },
+        parent: { database_id: VAULT_NOTION_DB },
         properties: {
           Name: { title: [{ text: { content: title } }] },
           ...(notes ? { Notes: { rich_text: [{ text: { content: String(notes).slice(0, 2000) } }] } } : {}),

@@ -8,6 +8,8 @@
 //   gitlab.com > Settings > Access Tokens > scope: api
 //   Self-hosted GitLab ho to GITLAB_API_URL bhi set karo (default: https://gitlab.com)
 // ============================================
+const vault = require('../lib/credentials.js');
+
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -17,7 +19,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
   try {
-    const TOKEN = process.env.GITLAB_TOKEN;
+    const TOKEN = await vault.getCredential('GITLAB_TOKEN');
     if (!TOKEN) {
       return res.status(500).json({
         error: 'GitLab not configured',
