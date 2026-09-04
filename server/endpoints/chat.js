@@ -63,6 +63,7 @@ const TOOLS = [
   { type: 'function', function: { name: 'create_automation', description: 'Ek scheduled automation save karo - jo roz 9 AM PKT khud chalegi. prompt = poora kaam jo karna hai (agent khud execute karega, tools ke saath).', parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam, e.g. roz-leads-dhundo' }, prompt: { type: 'string', description: 'poora kaam jo har roz karna hai' }, schedule: { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'abhi sirf daily support hai' } }, required: ['name', 'prompt'] } } },
   { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
+  { type: 'function', function: { name: 'run_pc_command', description: 'User ke connected PC/laptop pe terminal command chalao (Windows/Linux). SIRF tab use karo jab user ka PC connected ho - warna batao "pehle Connect PC page se PC connect karo". Commands: file dekhna, projects banana, git, npm, system info waghera.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'shell command, e.g. "dir" (Windows) ya "ls -la" (Linux)' } }, required: ['command'] } } },
 ];
 
 // ---------- internal executor (apne hi endpoints ko mock req/res se chalao) ----------
@@ -96,8 +97,61 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon' };
+
+// ---------- bridge (PC) helpers ----------
+async function bridgeApi(action, body) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; resolve(r); } };
+    const mockRes = {
+      setHeader: () => {},
+      status: (c) => { mockRes._c = c; return mockRes; },
+      json: (d) => finish({ status: mockRes._c || 200, data: d }),
+      _c: 200,
+    };
+    const mockReq = { method: 'POST', body: { action, ...body }, headers: {} };
+    try {
+      Promise.resolve(endpoints.bridge(mockReq, mockRes)).catch(e => finish({ status: 500, data: { error: e.message } }));
+    } catch (e) { finish({ status: 500, data: { error: e.message } }); }
+    setTimeout(() => finish({ status: 504, data: { error: 'timeout' } }), 45000);
+  });
+}
+
+async function getOnlineDevice() {
+  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
+    const r = await bridgeApi('devices', {});
+    const list = (r.data && r.data.devices) || [];
+    const online = list.filter(d => d.online);
+    // sab se recent online device
+    online.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+    return online[0] || null;
+  }
+  return null;
+}
+
+async function createBridgeJob(deviceId, type, payload) {
+  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_ANON_KEY;
+  const headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
+  const r = await fetch(SB_URL + '/rest/v1/bridge_jobs', { method: 'POST', headers, body: JSON.stringify({ device_id: deviceId, type, payload, status: 'pending' }) });
+  if (!r.ok) return null;
+  const rows = await r.json();
+  return rows[0] ? rows[0].id : null;
+}
+
+async function waitBridgeJob(jobId, maxMs) {
+  const start = Date.now();
+  while (Date.now() - start < maxMs) {
+    await new Promise(r => setTimeout(r, 1500));
+    const r = await bridgeApi('job_status', { job_id: jobId });
+    const job = r.data && r.data.job;
+    if (job && (job.status === 'done' || job.status === 'error')) {
+      return job.result || { error: 'no result' };
+    }
+  }
+  return null;
+}
 
 // endpoint deploy-vercel expects { secret } — server-side inject
 async function runTool(name, args, steps) {
@@ -110,6 +164,15 @@ async function runTool(name, args, steps) {
   if (name === 'build_and_deploy') { epName = 'deploy-vercel'; body = { secret: process.env.DEPLOY_SECRET || '', project_name: args.project_name, files: [{ name: 'index.html', content: args.index_html }] }; }
   if (name === 'search_businesses') { epName = 'search'; body = { query: args.query, location: args.location }; }
   if (name === 'create_automation') { epName = 'automations'; body = { action: 'create', name: args.name, prompt: args.prompt, schedule: args.schedule || 'daily' }; }
+  if (name === 'run_pc_command') {
+    // connected device dhundo, job banao, bridge ka result wait karo
+    const device = await getOnlineDevice();
+    if (!device) return JSON.stringify({ error: 'Koi PC connected nahi hai. User ko bolo: menu > Connect PC se apna PC/laptop connect karo (node bridge.js <code>).' });
+    const jobId = await createBridgeJob(device.id, 'shell', { command: args.command, cwd: args.cwd });
+    const result = await waitBridgeJob(jobId, 35000);
+    if (result === null) return JSON.stringify({ error: 'PC se jawab nahi aaya (timeout) - bridge chal raha hai? command: ' + args.command });
+    return JSON.stringify(result);
+  }
   if (name === 'list_automations') { epName = 'automations'; body = { action: 'list' }; }
   if (name === 'delete_automation') { epName = 'automations'; body = { action: 'delete', id: args.id }; }
   const r = await callEndpoint(epName, body);
@@ -129,15 +192,38 @@ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
-  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-  if (!process.env.OPENAI_API_KEY) {
-    return res.status(500).json({ error: 'OPENAI_API_KEY env var missing (Vercel > Settings > Environment Variables - ENCRYPTED type, not Sensitive!)' });
+  const { message, history, api_key, provider, model, device_id } = req.body || {};
+
+  // ---- OLLAMA (local PC) mode: bridge ke through local model ----
+  if (provider === 'ollama') {
+    if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
+      return res.status(500).json({ error: 'Ollama mode ke liye Supabase env vars chahiye (bridge system).' });
+    }
+    const rDevices = await bridgeApi('devices', {});
+    const devices = ((rDevices.data && rDevices.data.devices) || []).filter(d => d.online);
+    if (!devices.length) return res.status(400).json({ error: 'Koi PC connected nahi. Menu > Connect PC se apna PC connect karo (Ollama us PC pe hona chahiye).' });
+    const device = device_id ? (devices.find(d => d.id === device_id) || devices[0]) : devices[0];
+    const chosenModel = model || (device.ollama_models && device.ollama_models[0]);
+    if (!chosenModel) return res.status(400).json({ error: 'Is PC pe koi Ollama model nahi mila. "ollama pull llama3.2" chalao.' });
+    const jobId = await createBridgeJob(device.id, 'ollama_chat', { model: chosenModel, messages: [
+      { role: 'system', content: 'You are Dev Craft Agent. Reply in the same language the user uses (Urdu/Roman Urdu mix is fine). Be helpful, concise.' },
+      ...(Array.isArray(history) ? history.slice(-8).map(h => ({ role: h.role, content: h.content })) : []),
+      { role: 'user', content: message }
+    ] });
+    if (!jobId) return res.status(500).json({ error: 'Job create nahi hua (bridge_jobs table hai?)' });
+    const result = await waitBridgeJob(jobId, 45000);
+    if (result === null) return res.status(504).json({ error: 'PC se jawab nahi aaya - bridge/Ollama chal raha hai?' });
+    if (result.error) return res.status(500).json({ error: 'Ollama error: ' + result.error });
+    return res.json({ reply: result.reply || '(khali jawab)', steps: [{ title: '🦙 Local Ollama se jawab (' + chosenModel + ')', status: 'done', detail: device.device_name }], links: [] });
   }
 
-  try {
-    const { message, history } = req.body || {};
-    if (!message) return res.status(400).json({ error: 'message is required' });
+  const userKey = api_key || process.env.OPENAI_API_KEY;
+  if (!userKey) {
+    return res.status(500).json({ error: 'API key missing - Settings (menu > Settings) mein apni personal OpenAI API key paste karo, ya Vercel pe OPENAI_API_KEY set karo.' });
+  }
+  const openai = new OpenAI({ apiKey: userKey });
 
+  try {
     const steps = [];
     const links = [];
     const messages = [

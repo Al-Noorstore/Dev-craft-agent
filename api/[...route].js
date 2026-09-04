@@ -7,6 +7,7 @@
 const routes = {
   'audit': require('../server/endpoints/audit.js'),
   'automations': require('../server/endpoints/automations.js'),
+  'bridge': require('../server/endpoints/bridge.js'),
   'chat': require('../server/endpoints/chat.js'),
   'clone-site': require('../server/endpoints/clone-site.js'),
   'deploy-vercel': require('../server/endpoints/deploy-vercel.js'),

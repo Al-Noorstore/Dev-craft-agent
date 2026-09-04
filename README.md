@@ -27,6 +27,8 @@ Deploy ke baad apna Vercel URL kholo (phone ya laptop — dono pe perfect):
 | `GET /api/report` | 📊 Daily 9AM PKT report | Supabase+Gmail | Free |
 | `GET/POST /api/automations` | ⏰ Automations save/list/delete ("roz karo" = daily 9AM PKT) | Supabase | Free |
 | `GET /api/run-automations` | 🤖 Roz 9AM PKT saari automations khud chalata hai + digest email | OpenAI+Supabase | ~$5 |
+| `POST /api/bridge` | 💻 PC/laptop connect system (pairing, commands, Ollama models) | Supabase | Free |
+| `bridge.js` (repo root) | 🌉 Local script: `node bridge.js <CODE>` — PC ko agent se jodta hai | Node 18+ | Free |
 | `POST /api/stripe-payment` | 💳 Payment link banao | Stripe key | Free* |
 | `POST /api/sheets` | 📗 Google Sheets row add | Service Account | Free |
 | `POST /api/notion` | 📝 Notion entry | Notion token | Free |

@@ -97,6 +97,48 @@
   #send:hover { background: var(--primary-dark); }
   #send:disabled { opacity: 0.45; cursor: default; }
 
+  /* ============ CONNECT PC PAGE ============ */
+  .connect-page { max-width: 640px; margin: 0 auto; padding: 20px 16px 40px; }
+  .connect-page h2 { font-size: 20px; margin-bottom: 4px; }
+  .connect-page .sub { color: var(--text-muted); font-size: 13px; margin-bottom: 18px; }
+  .os-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+  .os-card { background: var(--card); border: 2px solid var(--border); border-radius: 14px; padding: 14px 8px; text-align: center; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--text-muted); transition: all .15s; }
+  .os-card .osic { font-size: 22px; display: block; margin-bottom: 6px; }
+  .os-card.active { border-color: var(--primary); color: var(--primary); background: var(--card); box-shadow: 0 4px 14px rgba(20,168,120,.12); }
+  .guide-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; }
+  .guide-box h3 { font-size: 14px; margin-bottom: 10px; color: var(--text); }
+  .gstep { display: flex; gap: 10px; margin-bottom: 12px; font-size: 13px; color: var(--text-muted); line-height: 1.5; }
+  .gstep .n { width: 20px; height: 20px; border-radius: 50%; background: var(--primary); color: white; font-size: 11px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-weight: 700; }
+  .cmd-block { display: flex; align-items: center; gap: 8px; background: #111827; color: #d1fae5; border-radius: 10px; padding: 10px 12px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; margin: 6px 0 12px; cursor: pointer; }
+  .cmd-block span { flex: 1; overflow-x: auto; white-space: nowrap; }
+  .cmd-block .cpy { background: var(--primary); color: white; border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 600; flex-shrink: 0; }
+  .status-card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 16px; }
+  .status-card .dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: #d1d5db; margin-right: 7px; }
+  .status-card .dot.on { background: #22c55e; box-shadow: 0 0 0 3px rgba(34,197,94,.15); }
+  .status-card .dot.pairing { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,.15); }
+  .dev-name { font-weight: 700; font-size: 14px; }
+  .dev-meta { color: var(--text-muted); font-size: 12px; margin-top: 3px; }
+  .primary-btn { background: var(--primary); color: white; border: none; border-radius: 10px; padding: 11px 20px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; }
+  .primary-btn:hover { background: var(--primary-dark); }
+  .pairing-code { font-size: 26px; font-weight: 800; letter-spacing: 4px; color: var(--primary); text-align: center; background: var(--pill-bg); border-radius: 10px; padding: 12px; margin: 10px 0; font-family: ui-monospace, Menlo, monospace; }
+
+  /* ============ SETTINGS MODAL ============ */
+  #settingsModal { position: fixed; inset: 0; background: rgba(17,24,39,.45); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #settingsModal.open { display: flex; }
+  .set-box { background: var(--card); border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; max-height: 86vh; overflow-y: auto; }
+  .set-box h3 { font-size: 16px; margin-bottom: 14px; }
+  .set-label { font-size: 12px; font-weight: 700; color: var(--text-muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .4px; }
+  .provider-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .provider-opt { border: 2px solid var(--border); border-radius: 10px; padding: 10px; cursor: pointer; text-align: center; font-size: 13px; font-weight: 600; color: var(--text-muted); }
+  .provider-opt.active { border-color: var(--primary); color: var(--primary); }
+  .set-input { width: 100%; border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; font-size: 13px; background: var(--bg); color: var(--text); outline: none; }
+  .set-input:focus { border-color: var(--primary); }
+  select.set-input { appearance: none; }
+  .set-hint { font-size: 11px; color: var(--text-faint); margin-top: 5px; line-height: 1.4; }
+  .set-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .ghost-btn { flex: 1; background: var(--pill-bg); color: var(--text); border: none; border-radius: 10px; padding: 11px; font-size: 14px; font-weight: 600; cursor: pointer; }
+  @media (max-width: 768px) { .os-row { grid-template-columns: 1fr; } }
+
   /* ============ MOBILE ============ */
   #backdrop { display: none; position: fixed; inset: 0; background: transparent; z-index: 58; }
   #backdrop.show { display: block; }
@@ -119,6 +161,8 @@
       <span class="ic" id="voiceIcon">🔊</span> <span id="voiceLabel">Voice replies: On</span>
     </div>
     <div class="menu-item" onclick="clearCurrent()"><span class="ic">🗑</span> Clear this chat</div>
+    <div class="menu-item" onclick="showConnect()"><span class="ic">💻</span> Connect PC <span id="pcDot" style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:#d1d5db"></span></div>
+    <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
     <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
   </aside>
@@ -159,11 +203,47 @@
     </div>
   </div>
 
+  <!-- SETTINGS MODAL -->
+  <div id="settingsModal" onclick="if(event.target===this)closeSettings()">
+    <div class="set-box">
+      <h3>⚙️ Settings</h3>
+      <div class="set-label">AI Provider</div>
+      <div class="provider-row">
+        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ OpenAI Cloud</div>
+        <div class="provider-opt" id="prov-ollama" onclick="setProvider('ollama')">🦙 Ollama (PC)</div>
+      </div>
+      <div id="openaiSet">
+        <div class="set-label">Personal API Key</div>
+        <input type="password" id="setApiKey" class="set-input" placeholder="sk-... (OpenAI API key)">
+        <div class="set-hint">Key sirf tumhare browser mein save hoti hai (localStorage) — server pe store nahi hoti. platform.openai.com/api-keys se lo.</div>
+        <div class="set-label">Model</div>
+        <input type="text" id="setModel" class="set-input" placeholder="gpt-4o-mini">
+      </div>
+      <div id="ollamaSet" style="display:none">
+        <div class="set-label">Your PC</div>
+        <div id="ollamaDevStatus" class="set-hint" style="margin-top:0">Checking connected PC...</div>
+        <div class="set-label">Ollama Model</div>
+        <select id="setOllamaModel" class="set-input"><option value="">— PC connect karo pehle —</option></select>
+        <div class="set-hint">Ollama models automatically list hote hain jab PC connected ho. Install: ollama.com → "ollama pull llama3.2"</div>
+      </div>
+      <div class="set-actions">
+        <button class="ghost-btn" onclick="closeSettings()">Cancel</button>
+        <button class="primary-btn" style="width:auto;flex:1" onclick="saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
 <script>
   // ====== STATE ======
   let conversations = JSON.parse(localStorage.getItem('dc_conversations') || '[]');
   let currentId = localStorage.getItem('dc_current') || null;
   let voiceEnabled = true, listening = false, busy = false;
+  let connectView = false, currentOS = 'windows';
+  let settings = JSON.parse(localStorage.getItem('dc_settings') || '{}');
+  let pairedCode = localStorage.getItem('dc_pair_code') || null;
+  let pairDeviceId = localStorage.getItem('dc_pair_device') || null;
+  let pcTimer = null;
+  if (!settings.provider) settings.provider = 'openai';
 
   const chat = document.getElementById('chat');
   const input = document.getElementById('input');
@@ -309,7 +389,8 @@
   function newChat() {
     const conv = { id: 'c' + Date.now(), title: 'New Chat', messages: [], updated: Date.now() };
     conversations.push(conv);
-    currentId = conv.id;
+    currentId = conv.id; connectView = false;
+    if (pcTimer) { clearInterval(pcTimer); pcTimer = null; }
     save(); renderSidebar(); renderChat();
     toggleSidebar(false);
     input.focus();
@@ -321,7 +402,8 @@
   }
 
   function goHome() {
-    currentId = null;
+    currentId = null; connectView = false;
+    if (pcTimer) { clearInterval(pcTimer); pcTimer = null; }
     save(); renderSidebar(); renderChat();
     document.getElementById('chatTitle').textContent = 'Dev Craft Agent';
     toggleSidebar(false);
@@ -338,6 +420,7 @@
   async function sendMsg() {
     const text = input.value.trim();
     if (!text || busy) return;
+    if (connectView) { showConnect(); }
     if (!current()) newChat();
     const welcomeEl = chat.querySelector('.welcome');
     if (welcomeEl) welcomeEl.remove();
@@ -355,10 +438,13 @@
     chat.scrollTop = chat.scrollHeight;
 
     try {
+      const payload = { message: text, history: c.messages.slice(-10) };
+      if (settings.provider === 'ollama') { payload.provider = 'ollama'; payload.model = settings.ollama_model; payload.device_id = settings.device_id; }
+      else { if (settings.api_key) payload.api_key = settings.api_key; if (settings.model) payload.model = settings.model; }
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history: c.messages.slice(-10) })
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       typingRow.remove();
@@ -414,6 +500,197 @@
       input.focus();
     };
     el.click();
+  }
+
+  // ====== CONNECT PC ======
+  const OS_GUIDES = {
+    windows: {
+      name: 'Windows 10/11', icon: '🪟',
+      steps: [
+        'Node.js install karo (LTS version): nodejs.org se download karke install karo.',
+        'Ye repo download karo: Code button (GitHub) > Download ZIP > extract karo. Ya: <b>git clone</b> repo.',
+        '<b>Command Prompt</b> ya <b>PowerShell</b> kholo, extract kiye folder mein jao:',
+        'Website pe wapas aa ke <b>Get pairing code</b> dabao, phir ye command chalao:',
+        'Bas! Website pe <b>PC Connected</b> dikhega. Terminal khula rehne do.'
+      ]
+    },
+    linux: {
+      name: 'Linux / Ubuntu', icon: '🐧',
+      steps: [
+        'Node.js install karo (Terminal mein): <b>sudo apt install nodejs npm -y</b>',
+        'Ye repo download karo: <b>git clone https://github.com/Al-Noorstore/Dev-craft-agent.git</b>',
+        'Folder mein jao:',
+        'Website pe wapas aa ke <b>Get pairing code</b> dabao, phir ye command chalao:',
+        'Bas! Website pe <b>PC Connected</b> dikhega. Terminal khula rehne do.'
+      ]
+    },
+    mac: {
+      name: 'macOS', icon: '',
+      steps: [
+        'Node.js install karo: nodejs.org ya <b>brew install node</b>',
+        'Ye repo download karo: <b>git clone https://github.com/Al-Noorstore/Dev-craft-agent.git</b>',
+        'Terminal mein folder mein jao:',
+        'Website pe wapas aa ke <b>Get pairing code</b> dabao, phir ye command chalao:',
+        'Bas! Website pe <b>PC Connected</b> dikhega. Terminal khula rehne do.'
+      ]
+    }
+  };
+  const OS_CMDS = {
+    windows: ['winget install OpenJS.NodeJS.LTS', 'cd Downloads\\Dev-craft-agent-main\\Dev-craft-agent-main', 'node bridge.js <CODE>'],
+    linux: ['sudo apt install nodejs npm -y', 'git clone https://github.com/Al-Noorstore/Dev-craft-agent.git && cd Dev-craft-agent', 'node bridge.js <CODE>'],
+    mac: ['brew install node', 'git clone https://github.com/Al-Noorstore/Dev-craft-agent.git && cd Dev-craft-agent', 'node bridge.js <CODE>']
+  };
+
+  function showConnect() {
+    connectView = true;
+    toggleSidebar(false);
+    renderConnect();
+  }
+
+  function renderConnect() {
+    const g = OS_GUIDES[currentOS];
+    const cmds = OS_CMDS[currentOS];
+    const cmdHtml = cmds.map(c => '<div class="cmd-block" onclick="copyCmd(this)"><span>' + c.replace(/</g, '&lt;') + '</span><span class="cpy">Copy</span></div>').join('');
+    chat.innerHTML = '<div class="connect-page">' +
+      '<h2>💻 Connect your PC / Laptop</h2>' +
+      '<p class="sub">Agent tumhare PC pe kaam karega — terminal commands, local Ollama models, sab kuch. Apna OS select karo:</p>' +
+      '<div class="os-row">' +
+        Object.keys(OS_GUIDES).map(k => '<div class="os-card' + (k === currentOS ? ' active' : '') + '" onclick="pickOS(\'' + k + '\')"><span class="osic">' + OS_GUIDES[k].icon + '</span>' + OS_GUIDES[k].name + '</div>').join('') +
+      '</div>' +
+      '<div id="connectStatus"></div>' +
+      '<div class="guide-box">' +
+        '<h3>' + g.icon + ' ' + g.name + ' — Step by Step</h3>' +
+        g.steps.map((st, i) => {
+          let html = '<div class="gstep"><span class="n">' + (i + 1) + '</span><span>' + st + '</span></div>';
+          if (i === 0 || i === 2 || i === 3) html += '<div class="cmd-block" onclick="copyCmd(this)"><span>' + cmds[i === 0 ? 0 : (i === 2 ? 1 : 2)].replace(/</g, '&lt;') + '</span><span class="cpy">Copy</span></div>';
+          return html;
+        }).join('') +
+      '</div>' +
+      '<div style="margin-top:14px"><button class="primary-btn" onclick="startPair()">' + (pairedCode && pairDeviceId ? 'Naya pairing code lo' : 'Get pairing code') + '</button></div>' +
+      '<p class="sub" style="margin-top:12px">💡 Connect hone ke baad: Settings (⚙️) mein Ollama models real-time dikhenge, aur agent tumhare PC pe commands chala sakta hai.</p>' +
+    '</div>';
+    renderConnectStatus();
+    startPCPolling();
+  }
+
+  function pickOS(k) { currentOS = k; renderConnect(); }
+
+  function copyCmd(el) {
+    const txt = el.querySelector('span').textContent;
+    navigator.clipboard.writeText(txt.includes('<CODE>') && pairedCode ? txt.replace('<CODE>', pairedCode) : txt);
+    const cpy = el.querySelector('.cpy'); cpy.textContent = 'Copied!';
+    setTimeout(() => cpy.textContent = 'Copy', 1500);
+  }
+
+  async function startPair() {
+    try {
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start_pair' }) });
+      const d = await r.json();
+      if (!d.success) { alert('Error: ' + (d.error || d.setup_help || 'Supabase setup missing')); return; }
+      pairedCode = d.code; pairDeviceId = d.device_id;
+      localStorage.setItem('dc_pair_code', pairedCode);
+      localStorage.setItem('dc_pair_device', pairDeviceId);
+      renderConnect();
+    } catch (e) { alert('Network error: ' + e.message); }
+  }
+
+  async function renderConnectStatus() {
+    const box = document.getElementById('connectStatus');
+    if (!box) return;
+    let html = '<div class="status-card"><span class="dot pairing"></span><b>Waiting for PC…</b>' +
+      (pairedCode ? '<div class="pairing-code">' + pairedCode + '</div><div class="dev-meta">Apne PC pe ye final command chalao: <b>node bridge.js ' + pairedCode + '</b></div>' : '<div class="dev-meta">"Get pairing code" dabao pehle.</div>') +
+      '</div>';
+    try {
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      const d = await r.json();
+      if (d.success && d.devices) {
+        const devs = d.devices;
+        if (devs.length) {
+          html = devs.map(dev => '<div class="status-card"><span class="dot' + (dev.online ? ' on' : '') + '"></span><span class="dev-name">' + (dev.device_name || 'PC') + '</span>' +
+            '<div class="dev-meta">' + (dev.os || '') + ' • ' + (dev.online ? '🟢 Connected' : '⚪ Offline') + '</div>' +
+            (dev.ollama_models && dev.ollama_models.length ? '<div class="dev-meta">🦙 Ollama: ' + dev.ollama_models.join(', ') + '</div>' : '<div class="dev-meta">🦙 Ollama nahi mila (optional)</div>') +
+            (dev.online ? '<div style="margin-top:10px"><button class="ghost-btn" style="padding:8px 14px;font-size:12px" onclick="disconnectPC(\'' + dev.id + '\')">Disconnect</button></div>' : '') +
+            '</div>').join('');
+          const onlineDev = devs.find(x => x.online);
+          updatePCDot(!!onlineDev);
+          if (onlineDev) { settings.device_id = onlineDev.id; if (onlineDev.ollama_models && onlineDev.ollama_models.length && !settings.ollama_model) settings.ollama_model = onlineDev.ollama_models[0]; localStorage.setItem('dc_settings', JSON.stringify(settings)); }
+        }
+      } else if (d.error && d.setup_help) {
+        html = '<div class="status-card"><span class="dot"></span><b>Setup missing</b><div class="dev-meta">Supabase env vars set karo (SUPABASE_URL, SUPABASE_ANON_KEY) + bridge_devices & bridge_jobs tables banao.</div></div>';
+      }
+    } catch (e) { /* network */ }
+    box.innerHTML = html;
+  }
+
+  async function disconnectPC(id) {
+    await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'disconnect', device_id: id }) });
+    renderConnectStatus();
+  }
+
+  function startPCPolling() {
+    if (pcTimer) clearInterval(pcTimer);
+    renderConnectStatus();
+    pcTimer = setInterval(() => { if (connectView) renderConnectStatus(); else updatePCDotAsync(); }, 4000);
+  }
+
+  async function updatePCDotAsync() {
+    try {
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      const d = await r.json();
+      updatePCDot(d.success && (d.devices || []).some(x => x.online));
+    } catch (e) {}
+  }
+
+  function updatePCDot(on) {
+    const dot = document.getElementById('pcDot');
+    if (dot) dot.style.background = on ? '#22c55e' : '#d1d5db';
+  }
+
+  // ====== SETTINGS ======
+  function openSettings() {
+    toggleSidebar(false);
+    document.getElementById('settingsModal').classList.add('open');
+    setProvider(settings.provider || 'openai');
+    document.getElementById('setApiKey').value = settings.api_key || '';
+    document.getElementById('setModel').value = settings.model || '';
+    refreshOllamaModels();
+  }
+  function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+
+  function setProvider(prov) {
+    settings.provider = prov;
+    document.getElementById('prov-openai').classList.toggle('active', prov === 'openai');
+    document.getElementById('prov-ollama').classList.toggle('active', prov === 'ollama');
+    document.getElementById('openaiSet').style.display = prov === 'openai' ? 'block' : 'none';
+    document.getElementById('ollamaSet').style.display = prov === 'ollama' ? 'block' : 'none';
+  }
+
+  async function refreshOllamaModels() {
+    const st = document.getElementById('ollamaDevStatus');
+    const sel = document.getElementById('setOllamaModel');
+    st.textContent = 'Checking connected PC...';
+    try {
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      const d = await r.json();
+      if (!d.success) { st.textContent = '⚠️ ' + (d.error || 'Supabase setup missing'); return; }
+      const online = (d.devices || []).filter(x => x.online);
+      if (!online.length) { st.textContent = '🔴 Koi PC connected nahi — pehle Connect PC karo (menu > Connect PC)'; sel.innerHTML = '<option value="">— PC connect karo pehle —</option>'; return; }
+      const dev = online.find(x => x.id === settings.device_id) || online[0];
+      settings.device_id = dev.id;
+      st.innerHTML = '🟢 <b>' + (dev.device_name || 'PC') + '</b> connected (' + (dev.os || '') + ')';
+      const models = dev.ollama_models || [];
+      if (!models.length) { sel.innerHTML = '<option value="">— koi Ollama model nahi mila (ollama pull karo) —</option>'; return; }
+      sel.innerHTML = models.map(m => '<option value="' + m + '"' + (m === settings.ollama_model ? ' selected' : '') + '>' + m + '</option>').join('');
+      if (!settings.ollama_model) settings.ollama_model = models[0];
+    } catch (e) { st.textContent = 'Network error'; }
+  }
+
+  function saveSettings() {
+    settings.api_key = document.getElementById('setApiKey').value.trim();
+    settings.model = document.getElementById('setModel').value.trim() || 'gpt-4o-mini';
+    settings.ollama_model = document.getElementById('setOllamaModel').value || settings.ollama_model;
+    localStorage.setItem('dc_settings', JSON.stringify(settings));
+    closeSettings();
   }
 
   // ====== TOP MENU DROPDOWN ======
