@@ -173,6 +173,7 @@
     <div class="menu-item" onclick="clearCurrent()"><span class="ic">🗑</span> Clear this chat</div>
     <div class="menu-item" onclick="showConnect()"><span class="ic">💻</span> Connect PC <span id="pcDot" style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:#d1d5db"></span></div>
     <div class="menu-item" onclick="showDownload()"><span class="ic">⬇️</span> Download App</div>
+    <div class="menu-item" id="authItem" onclick="authClick()" style="display:none"><span class="ic">🔑</span> Sign in with Google</div>
     <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
     <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
@@ -471,7 +472,7 @@
     chat.scrollTop = chat.scrollHeight;
 
     try {
-      const payload = { message: text, history: c.messages.slice(-10), user_id: uid };
+      const payload = { message: text, history: c.messages.slice(-10), user_id: uid, access_token: accessToken || undefined };
       if (settings.provider === 'ollama') { payload.provider = 'ollama'; payload.model = settings.ollama_model; payload.device_id = settings.device_id; }
       else if (settings.provider === 'openrouter') { payload.provider = 'openrouter'; payload.api_key = settings.or_key; payload.model = settings.or_model; }
       else if (settings.provider === 'custom') { payload.provider = 'custom'; payload.api_key = settings.custom_key; payload.base_url = settings.base_url; payload.model = settings.custom_model; }
@@ -736,6 +737,59 @@
   }
 
   // ====== SETTINGS ======
+  // ================= GOOGLE AUTH (Supabase) =================
+  let sbClient = null, accessToken = null, authUser = null;
+  async function initAuth() {
+    try {
+      const r = await fetch('/api/config');
+      const cfg = await r.json();
+      if (!cfg || !cfg.supabase_url || !cfg.supabase_anon_key) return; // auth off
+      if (!window.supabase) {
+        await new Promise((res, rej) => {
+          const s = document.createElement('script');
+          s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+          s.onload = res; s.onerror = rej;
+          document.head.appendChild(s);
+        });
+      }
+      sbClient = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+      sbClient.auth.onAuthStateChange((_ev, session) => applySession(session));
+      const { data } = await sbClient.auth.getSession();
+      applySession(data && data.session);
+    } catch (e) { /* auth optional - chup chaap skip */ }
+  }
+  function applySession(session) {
+    authUser = (session && session.user) || null;
+    accessToken = (session && session.access_token) || null;
+    if (authUser) {
+      // REAL verified user id - vault isi se khulta hai (server bhi verify karta hai)
+      uid = authUser.id;
+    } else {
+      accessToken = null;
+      uid = localStorage.getItem('dc_user_id') || uid; // anonymous device fallback
+    }
+    const item = document.getElementById('authItem');
+    if (item) {
+      item.style.display = 'flex';
+      if (authUser) {
+        const name = (authUser.user_metadata && authUser.user_metadata.full_name) || authUser.email || 'Signed in';
+        item.innerHTML = '<span class="ic">🟢</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px" title="' + (authUser.email || '') + '">' + name + '</span> <span style="margin-left:auto;font-size:11px;color:#e11d48" onclick="event.stopPropagation();signOutNow()">Sign out</span>';
+      } else {
+        item.innerHTML = '<span class="ic">🔑</span> Sign in with Google';
+      }
+    }
+  }
+  function authClick() { if (!authUser) signInGoogle(); }
+  async function signInGoogle() {
+    if (!sbClient) return;
+    await sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin } });
+  }
+  async function signOutNow() {
+    if (sbClient) await sbClient.auth.signOut();
+    applySession(null);
+  }
+  initAuth();
+
   function openSettings() {
     toggleSidebar(false);
     document.getElementById('settingsModal').classList.add('open');

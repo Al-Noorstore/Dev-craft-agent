@@ -9,6 +9,7 @@
 // ============================================
 const OpenAI = require('openai');
 const vault = require('../lib/credentials.js');
+const auth = require('../lib/auth.js');
 
 const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft Studio, a web design & web app agency run by Wishal (a student developer from Pakistan).
 
@@ -214,8 +215,11 @@ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
-  const { message, history, api_key, provider, model, device_id, user_id } = req.body || {};
-  const uid = String(user_id || 'owner').trim() || 'owner'; // har user ka apna credential vault
+  const { message, history, api_key, provider, model, device_id, user_id, access_token } = req.body || {};
+  // har user ka apna credential vault. Google login (Supabase auth) ho to access_token
+  // verify karke REAL user id use hota hai - spoofing impossible.
+  const authR = await auth.resolveUser(req, user_id || 'owner');
+  const uid = authR.uid;
 
   // ---- OLLAMA (local PC) mode: bridge ke through local model ----
   if (provider === 'ollama') {

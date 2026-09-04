@@ -11,6 +11,41 @@ Deploy ke baad apna Vercel URL kholo (phone ya laptop — dono pe perfect):
 - 📱 **Add to Home Screen**: mobile pe "Install app" karo — app jaisa lagta hai!
 **Har user ka apna alag chat** — WhatsApp/Telegram pe bhi har client apne private chat mein baat karta hai, jaise real apps mein hota hai.
 
+## 🔑 GOOGLE LOGIN (Supabase Auth) — v8 NEW!
+
+Ab users **Google se sign in** kar sakte hain — aur unka credential vault **REAL verified Google account** se judta hai (ab user_id spoof karna impossible):
+
+- Sidebar mein **"Sign in with Google"** button
+- Sign in ke baad: name + Sign out dikhata hai
+- Vault ab **verified user id** use karta hai — server token ko Supabase se verify karta hai, client jo bhejde
+- Bina login: anonymous device id (pehle jaisa) — sab kuch phir bhi chalta rehta hai
+
+### Setup (10 min, sirf 1 baar)
+
+1. **Google Cloud Console** → console.cloud.google.com → naya project (ya purana) → *APIs & Services → Credentials → Create Credentials → OAuth client ID → Web application*
+   - **Authorized redirect URIs** mein daalo: `https://YOUR-SUPABASE-PROJECT-REF.supabase.co/auth/v1/callback`
+   (YOUR-SUPABASE-PROJECT-REF = supabase dashboard URL mein hai: `https://<ref>.supabase.co`)
+   - Client ID + Client Secret copy karo
+2. **Supabase Dashboard** → *Authentication → Providers → Google* → enable karo → Client ID/Secret paste karo → Save
+3. **Supabase Dashboard** → *Authentication → URL Configuration* → **Site URL**: apna Vercel URL (e.g. `https://dev-craft-agent.vercel.app`) → **Redirect URLs** mein bhi wahi Vercel URL add karo
+4. Deploy karo. Bas! Login button khud aa jayega (jab SUPABASE_URL + SUPABASE_ANON_KEY env set hon)
+
+**Optional (behtar):** credentials table pe RLS lagao taakay users sirf apni rows dekh sakein (Supabase SQL):
+```sql
+alter table credentials enable row level security;
+create policy "own vault rows" on credentials
+  for all using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+```
+(Not: RLS lagane ke baad server anon-key se vault rows nahi padh payega — `/api/credentials` service role key use karta hai. Advanced step hai, zaroori nahi.)
+
+### How it works (technical)
+
+- `/api/config` → frontend ko Supabase URL + anon key deta hai (anon key public hai by design — login ke liye)
+- Google → Supabase OAuth → session token browser mein
+- Har chat/credentials request mein `access_token` bhi jata hai
+- `server/lib/auth.js` token ko `GET {SUPABASE_URL}/auth/v1/user` se verify karta hai → **real user id** → vault scope
+- Invalid/missing token → anonymous `user_id` fallback (backward compatible)
+
 ## 🔐 TOKEN / CREDENTIAL SKILL (Solene-style — v7 NEW!)
 
 Ab agent kisi bhi token/credentials le kar khud kaam karta hai — jaise real AI agents karte hain:
@@ -61,7 +96,7 @@ curl -X POST https://YOUR-APP.vercel.app/api/credentials \
 
 Local PC: desktop app chalao → `http://localhost:3155/api/credentials` pe same API (local vault to already alag hai — har PC apni file rakhta hai).
 
-**Kaise user pehchana jata hai:** web pe har browser ka apna `user_id` (localStorage mein banta hai, server ko har request ke saath jata hai), WhatsApp pe phone number (`wa_92xxx`), Telegram pe chat id (`tg_123`) — API mein `"user_id"` field se bhi de sakte ho. `.env` vars global server config hain (owner ki marzi — jaise OPENAI key sab ke liye); **vault tokens sirf usi user ke liye**, values encrypted aur masked.
+**Kaise user pehchana jata hai:** Google login ho to **verified Supabase user id** (spoof-proof); warna web pe har browser ka apna anonymous `user_id` (localStorage), WhatsApp pe phone number (`wa_92xxx`), Telegram pe chat id (`tg_123`) — API mein `"user_id"` field se bhi de sakte ho. `.env` vars global server config hain (owner ki marzi — jaise OPENAI key sab ke liye); **vault tokens sirf usi user ke liye**, values encrypted aur masked.
 
 ## All 17 Capabilities
 

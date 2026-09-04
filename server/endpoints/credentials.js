@@ -11,6 +11,7 @@
 // Requires: Supabase + "credentials" table (SQL README mein)
 // ============================================
 const vault = require('../lib/credentials.js');
+const auth = require('../lib/auth.js');
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -22,8 +23,10 @@ module.exports = async (req, res) => {
   try {
     const body = req.body || {};
     const action = req.method === 'GET' ? 'list' : (body.action || 'list');
-    // har user ka apna vault - user_id body/query se (default 'owner')
-    const userId = body.user_id || new URL(req.url, 'http://x').searchParams.get('user_id') || 'owner';
+    // har user ka apna vault. Google login ho to access_token se REAL user id
+    // verify hota hai; warna body/query user_id (anonymous device) fallback.
+    const authR = await auth.resolveUser(req, body.user_id || new URL(req.url, 'http://x').searchParams.get('user_id') || 'owner');
+    const userId = authR.uid;
 
     if (action === 'save') {
       const r = await vault.saveCredential(body.name, body.value, body.description, userId);
