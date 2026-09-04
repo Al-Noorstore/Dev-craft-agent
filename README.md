@@ -25,6 +25,8 @@ Deploy ke baad apna Vercel URL kholo (phone ya laptop — dono pe perfect):
 | `GET /api/read-emails` | 📥 Inbox + AI classify | Gmail OAuth | Free |
 | `GET/POST /api/leads` | 💾 Leads DB | Supabase | Free |
 | `GET /api/report` | 📊 Daily 9AM PKT report | Supabase+Gmail | Free |
+| `GET/POST /api/automations` | ⏰ Automations save/list/delete ("roz karo" = daily 9AM PKT) | Supabase | Free |
+| `GET /api/run-automations` | 🤖 Roz 9AM PKT saari automations khud chalata hai + digest email | OpenAI+Supabase | ~$5 |
 | `POST /api/stripe-payment` | 💳 Payment link banao | Stripe key | Free* |
 | `POST /api/sheets` | 📗 Google Sheets row add | Service Account | Free |
 | `POST /api/notion` | 📝 Notion entry | Notion token | Free |

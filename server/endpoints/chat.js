@@ -19,6 +19,16 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 - Keep replies SHORT and actionable. Use max 5 bullet points. End with a concrete next-step suggestion (not "let me know" - instead suggest: "audit karun?" / "deploy kar doon?").
 - Never invent tool results. If a tool errors, say what failed honestly and suggest a fix.
 
+## INTENT MODES (user ke kaam ka TYPE pehle pehchano, phir usi style mein karo):
+1. WEBSITE REQUEST ("website banao", "site bana do", "homepage banao", "landing page chahiye", "mere liye site deploy karo"):
+   - Questions mat pucho - IMMEDIATELY build_and_deploy call karo. Complete professional website likho (single index.html, inline CSS/JS, responsive, hero + about + services + pricing + contact + footer sections) aur live URL do.
+   - Sirf tabhi sawal poocho jab business ka naam/type hi na diya ho - tab bhi ek sensible template bana ke deploy karo aur "details do, customize kar dunga" bolo.
+2. STEP-WISE REQUEST ("step by step batavo", "steps mein karo", "sirf step wise kaam karo", "aaram se ek ek step"):
+   - Pehle ek numbered plan do (Step 1, Step 2, ...) aur har step complete hone par chhota result note karo. Ek waqt mein ek hi step - user se "agli step?" nahi poochna, khud chalte raho lekin har step clearly dikhe.
+3. AUTOMATION / SCHEDULE REQUEST ("roz karo", "har roz", "daily", "every morning", "schedule karo", "automation banao", "har hafte", "weekly"):
+   - User jo kaam bolta hai uska ek clear PROMPT banao aur create_automation tool se save karo. Confirm karo: "Ye automation save ho gayi - roz 9 AM PKT khud chalegi ✅". Schedule sirf daily/weekly/monthly support hai - ye honestly batana.
+   - "Mere automations dikhao" => list_automations. "Ye automation hatao" => delete_automation.
+
 ## YOUR TOOLS:
 1. audit_website(url) - live website audit: HTTPS, mobile-friendly, speed, design, SEO. Use it automatically whenever a URL appears.
 2. search_businesses(query, location) - Google search for real businesses.
@@ -48,6 +58,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'clone_site', description: 'Website ka design/HTML clone karke zip banata hai (sirf reference ke liye)', parameters: { type: 'object', properties: { url: { type: 'string' } }, required: ['url'] } } },
   { type: 'function', function: { name: 'build_and_deploy', description: 'Ek complete static website likho (single index.html, inline CSS/JS, responsive, professional) aur Vercel pe LIVE deploy karo. Live URL milta hai.', parameters: { type: 'object', properties: { project_name: { type: 'string', description: 'lowercase-dashes, e.g. client-restaurant-site' }, index_html: { type: 'string', description: 'COMPLETE index.html content' } }, required: ['project_name', 'index_html'] } } },
   { type: 'function', function: { name: 'read_emails', description: 'Inbox ke latest replies padho aur classify karo', parameters: { type: 'object', properties: { max: { type: 'number' }, classify: { type: 'boolean' } } } } },
+  { type: 'function', function: { name: 'create_automation', description: 'Ek scheduled automation save karo - jo roz 9 AM PKT khud chalegi. prompt = poora kaam jo karna hai (agent khud execute karega, tools ke saath).', parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam, e.g. roz-leads-dhundo' }, prompt: { type: 'string', description: 'poora kaam jo har roz karna hai' }, schedule: { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'abhi sirf daily support hai' } }, required: ['name', 'prompt'] } } },
+  { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
 ];
 
 // ---------- internal executor (apne hi endpoints ko mock req/res se chalao) ----------
@@ -81,8 +94,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon' };
 
 // endpoint deploy-vercel expects { secret } — server-side inject
 async function runTool(name, args, steps) {
@@ -94,6 +107,9 @@ async function runTool(name, args, steps) {
   if (name === 'clone_site') { epName = 'clone-site'; body = { url: args.url }; }
   if (name === 'build_and_deploy') { epName = 'deploy-vercel'; body = { secret: process.env.DEPLOY_SECRET || '', project_name: args.project_name, files: [{ name: 'index.html', content: args.index_html }] }; }
   if (name === 'search_businesses') { epName = 'search'; body = { query: args.query, location: args.location }; }
+  if (name === 'create_automation') { epName = 'automations'; body = { action: 'create', name: args.name, prompt: args.prompt, schedule: args.schedule || 'daily' }; }
+  if (name === 'list_automations') { epName = 'automations'; body = { action: 'list' }; }
+  if (name === 'delete_automation') { epName = 'automations'; body = { action: 'delete', id: args.id }; }
   const r = await callEndpoint(epName, body);
   const ok = r.status < 400 && !(r.data && r.data.error);
   step.status = ok ? 'done' : 'error';
@@ -103,7 +119,7 @@ async function runTool(name, args, steps) {
   return JSON.stringify(r.data && r.data.zip_base64 ? { ...r.data, zip_base64: `[zip ready, ${(r.data.size_bytes/1024).toFixed(0)}KB - base64 response mein hai]` } : r.data);
 }
 
-module.exports = async (req, res) => {
+const handler = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -158,3 +174,9 @@ module.exports = async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 };
+
+// Exports - run-automations.js (cron) inhe reuse karta hai
+handler.SYSTEM_PROMPT = SYSTEM_PROMPT;
+handler.TOOLS = TOOLS;
+handler.runTool = runTool;
+module.exports = handler;

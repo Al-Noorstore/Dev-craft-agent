@@ -6,6 +6,7 @@
 // ============================================
 const routes = {
   'audit': require('../server/endpoints/audit.js'),
+  'automations': require('../server/endpoints/automations.js'),
   'chat': require('../server/endpoints/chat.js'),
   'clone-site': require('../server/endpoints/clone-site.js'),
   'deploy-vercel': require('../server/endpoints/deploy-vercel.js'),
@@ -21,6 +22,7 @@ const routes = {
   'notion': require('../server/endpoints/notion.js'),
   'read-emails': require('../server/endpoints/read-emails.js'),
   'report': require('../server/endpoints/report.js'),
+  'run-automations': require('../server/endpoints/run-automations.js'),
   'score': require('../server/endpoints/score.js'),
   'search': require('../server/endpoints/search.js'),
   'send-email': require('../server/endpoints/send-email.js'),

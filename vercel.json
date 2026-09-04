@@ -1,5 +1,16 @@
 {
   "version": 2,
   "cleanUrls": true,
-  "name": "dev-craft-agent"
+  "name": "dev-craft-agent",
+  "crons": [
+    {
+      "path": "/api/run-automations",
+      "schedule": "0 4 * * *"
+    }
+  ],
+  "functions": {
+    "api/[...route].js": {
+      "maxDuration": 60
+    }
+  }
 }
