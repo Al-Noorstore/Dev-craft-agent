@@ -77,7 +77,7 @@ async function runTool(name, args, steps) {
   let title = name, result = {};
   try {
     if (name === 'run_command') { title = '⌨ Terminal: ' + String(args.command || '').slice(0, 50); result = await sh(args.command, (args.timeout || 60) * 1000); }
-    else if (name === 'file_write') { fs.writeFileSync(args.path, args.content || '', 'utf8'); result = { ok: true, saved: args.path }; title = '📝 File likhi: ' + path.basename(args.path); }
+    else if (name === 'file_write') { fs.mkdirSync(path.dirname(args.path), { recursive: true }); fs.writeFileSync(args.path, args.content || '', 'utf8'); result = { ok: true, saved: args.path }; title = '📝 File likhi: ' + path.basename(args.path); }
     else if (name === 'file_read') { result = { content: fs.readFileSync(args.path, 'utf8').slice(0, 8000) }; title = '📖 File padhi: ' + path.basename(args.path); }
     else if (name === 'file_list') { const list = fs.readdirSync(args.path).slice(0, 200).map(f => { try { return f + (fs.statSync(path.join(args.path, f)).isDirectory() ? '/' : ''); } catch { return f; } }); result = { files: list }; title = '📂 Folder dekha: ' + path.basename(args.path || args.path); }
     else if (name === 'file_delete') {
@@ -298,6 +298,67 @@ async function chat(req, res, body) {
 // ---------- server ----------
 const HTML = fs.existsSync(path.join(__dirname, 'desktop.html')) ? fs.readFileSync(path.join(__dirname, 'desktop.html'), 'utf8') : '<h1>desktop.html missing!</h1>';
 
+// ---------- SELF-TEST MODE: node app.js --test ----------
+async function selfTest() {
+  console.log('=== DEV CRAFT AGENT SELF-TEST ===\n');
+  const results = [];
+  const T = async (name, fn) => {
+    try { const detail = await fn(); results.push({ name, ok: true, detail: detail || '' }); console.log('  PASS  ' + name + (detail ? '  - ' + detail : '')); }
+    catch (e) { results.push({ name, ok: false, detail: String(e.message || e).slice(0, 80) }); console.log('  FAIL  ' + name + '  - ' + String(e.message || e).slice(0, 80)); }
+  };
+  const assert = (c, msg) => { if (!c) throw new Error(msg || 'assert fail'); };
+
+  const home = os.homedir(), tmp = path.join(home, 'devcraft-test-' + Date.now());
+  await T('terminal command (echo)', async () => {
+    const r = await sh('echo hello-test', 10000);
+    assert(r.ok && (r.output || '').includes('hello-test'), JSON.stringify(r).slice(0, 100));
+    return 'echo works';
+  });
+  await T('file_write + read + edit + delete', async () => {
+    const steps = [];
+    const r1 = JSON.parse(await runTool('file_write', { path: path.join(tmp, 'sub', 't.txt'), content: 'line1' }, steps));
+    const r2 = JSON.parse(await runTool('file_read', { path: path.join(tmp, 'sub', 't.txt') }, steps));
+    JSON.parse(await runTool('file_write', { path: path.join(tmp, 'sub', 't.txt'), content: 'line1\nline2-EDITED' }, steps));
+    const r4 = JSON.parse(await runTool('file_read', { path: path.join(tmp, 'sub', 't.txt') }, steps));
+    const r5 = JSON.parse(await runTool('file_delete', { path: path.join(tmp, 'sub', 't.txt') }, steps));
+    assert(r1.ok && r2.content === 'line1' && r4.content.includes('EDITED') && r5.ok, 'r1=' + JSON.stringify(r1) + ' r2=' + JSON.stringify(r2) + ' r4=' + JSON.stringify(r4).slice(0,50) + ' r5=' + JSON.stringify(r5));
+    return 'CRUD ok';
+  });
+  await T('folder create + list + delete', async () => {
+    const steps = [];
+    const r1 = JSON.parse(await runTool('file_write', { path: path.join(tmp, 'a', 'b', 'c.txt'), content: 'x' }, steps));
+    JSON.parse(await runTool('file_list', { path: tmp }, steps));
+    const r3 = JSON.parse(await runTool('file_delete', { path: tmp }, steps));
+    assert(r1.ok && r3.ok, 'folder ops fail');
+    return 'ok';
+  });
+  await T('system_info', async () => {
+    const steps = [];
+    const r = JSON.parse(await runTool('system_info', {}, steps));
+    assert(r.os, 'info missing');
+    return (r.os || '').slice(0, 40);
+  });
+  await T('android SDK check', async () => {
+    const steps = [];
+    const r = JSON.parse(await runTool('android_project', { action: 'check' }, steps));
+    return 'JDK:' + (r.jdk_ok ? 'OK' : 'nahi') + ' SDK:' + (r.sdk_ok ? 'OK' : 'nahi') + ' Gradle:' + (r.gradle_ok ? 'OK' : 'nahi');
+  });
+  await T('Ollama (optional)', async () => {
+    const r = await sh('ollama list 2>/dev/null', 8000);
+    return r.ok ? 'models mil gaye' : 'skip - ollama install nahi (optional)';
+  });
+  await T('7-Zip (exe ke liye, optional)', async () => {
+    const r = await sh(IS_WIN ? 'where 7z' : 'which 7z 7za', 5000);
+    return r.ok ? '7z mila - SFX exe possible' : 'skip - 7-Zip install nahi (optional)';
+  });
+  try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (e) {}
+  const pass = results.filter(r => r.ok).length;
+  console.log('\n=== RESULT: ' + pass + '/' + results.length + ' PASS ===');
+  console.log('AI brain alag test: app chalao (node app.js) > browser > message bhejo');
+  process.exit(results.some(r => !r.ok) ? 1 : 0);
+}
+if (process.argv.includes('--test')) { selfTest(); return; }
+
 http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
   if (req.method === 'POST') {
@@ -326,4 +387,4 @@ http.createServer((req, res) => {
 });
 
 // (test export - production mein koi asar nahi)
-if (process.env.DCD_EXPORT) module.exports = { runTool };
+if (process.env.DCD_EXPORT) module.exports = { runTool, selfTest };
