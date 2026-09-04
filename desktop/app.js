@@ -23,7 +23,7 @@ const IS_MAC = process.platform === 'darwin';
 // ---------- helpers ----------
 function sh(command, timeoutMs = 30000) {
   return new Promise((resolve) => {
-    exec(command, { timeout: Math.min(timeoutMs, 120000), maxBuffer: 4 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+    exec(command, { timeout: Math.min(timeoutMs || 30000, 600000), maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
       resolve({ ok: !err, output: (stdout || '').slice(0, 6000), error: (stderr || '').slice(0, 2000) || (err ? err.message : ''), exit: err ? (err.code || 1) : 0 });
     });
   });
@@ -53,7 +53,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'open_app', description: 'App, file ya website kholo. Examples: "notepad", "C:\\Program Files\\...\\app.exe", "https://youtube.com", koi bhi file.', parameters: { type: 'object', properties: { target: { type: 'string' } }, required: ['target'] } } },
   { type: 'function', function: { name: 'close_app', description: 'App band karo (process kill). Process name do, e.g. "notepad", "chrome", "vlc".', parameters: { type: 'object', properties: { process_name: { type: 'string' } }, required: ['process_name'] } } },
   { type: 'function', function: { name: 'youtube', description: 'YouTube control karo: search, video open, ya YouTube band karo.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['search', 'open', 'close'], description: 'search = YouTube pe search karo (query do), open = video/channel URL kholo (url do), close = YouTube browser tab/app band' }, query: { type: 'string' }, url: { type: 'string' } }, required: ['action'] } } },
-  { type: 'function', function: { name: 'system_info', description: 'PC ki info: OS, RAM, disk, current user, IP', parameters: { type: 'object', properties: {} } } }
+  { type: 'function', function: { name: 'system_info', description: 'PC ki info: OS, RAM, disk, current user, IP', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } }
 ];
 
 const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - running directly on the user's own laptop/PC (OpenClaw-style power user assistant). You have FULL tools:
@@ -66,13 +67,15 @@ RULES:
 4. Commands ke liye OS ke mutabiq commands use karo (Windows: dir, taskkill; Linux/Mac: ls, pkill). User ka OS: __OS__.
 5. Har tool ke result ke baad chhota summary do. Final reply concise rakho.
 6. YouTube search: youtube tool {action:"search", query}. App kholna: open_app. Band karna: close_app (process name).
-7. File paths mein spaces ho to quotes use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
+7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
+
+function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
 
 // ---------- tool executor ----------
 async function runTool(name, args, steps) {
   let title = name, result = {};
   try {
-    if (name === 'run_command') { title = '⌨ Terminal: ' + String(args.command || '').slice(0, 50); result = await sh(args.command, 60000); }
+    if (name === 'run_command') { title = '⌨ Terminal: ' + String(args.command || '').slice(0, 50); result = await sh(args.command, (args.timeout || 60) * 1000); }
     else if (name === 'file_write') { fs.writeFileSync(args.path, args.content || '', 'utf8'); result = { ok: true, saved: args.path }; title = '📝 File likhi: ' + path.basename(args.path); }
     else if (name === 'file_read') { result = { content: fs.readFileSync(args.path, 'utf8').slice(0, 8000) }; title = '📖 File padhi: ' + path.basename(args.path); }
     else if (name === 'file_list') { const list = fs.readdirSync(args.path).slice(0, 200).map(f => { try { return f + (fs.statSync(path.join(args.path, f)).isDirectory() ? '/' : ''); } catch { return f; } }); result = { files: list }; title = '📂 Folder dekha: ' + path.basename(args.path || args.path); }
@@ -89,6 +92,67 @@ async function runTool(name, args, steps) {
       else { result = await killProcess(IS_WIN ? 'chrome' : 'firefox'); title = '📺 YouTube/browser band'; }
     }
     else if (name === 'system_info') { result = { os: os.type() + ' ' + os.release(), hostname: os.hostname(), user: os.userInfo().username, cpu: os.cpus()[0] && os.cpus()[0].model, ram_gb: Math.round(os.totalmem() / 1024 / 1024 / 1024), freemem_gb: Math.round(os.freemem() / 1024 / 1024 / 1024), uptime_h: Math.round(os.uptime() / 3600) }; title = '💻 System info'; }
+    else if (name === 'android_project') {
+      const home = os.homedir();
+      const sdkDir = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT ||
+        (IS_WIN ? path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk') :
+         fs.existsSync(path.join(home, 'Android', 'Sdk')) ? path.join(home, 'Android', 'Sdk') :
+         fs.existsSync(path.join(home, 'android-sdk')) ? path.join(home, 'android-sdk') : null);
+      if (args.action === 'check') {
+        title = '🤖 Android SDK check';
+        const java = await sh('java -version 2>&1', 10000);
+        const gradle = await sh((IS_WIN ? 'gradle.bat' : 'gradle') + ' --version 2>&1 | head -5', 15000);
+        const adb = sdkDir ? await sh('"' + path.join(sdkDir, 'platform-tools', IS_WIN ? 'adb.exe' : 'adb') + '" version', 10000) : { ok: false, error: 'not found' };
+        result = {
+          jdk: java.ok ? (java.output || java.error).split('\n')[0] : 'Java nahi mila - JDK 17 install karo',
+          jdk_ok: java.ok,
+          gradle: gradle.ok ? ((gradle.output || '').split('\n').filter(l => l.includes('Gradle'))[0] || 'found') : 'Gradle nahi mila - gradle.org ya choco/brew se install karo',
+          gradle_ok: gradle.ok,
+          sdk: sdkDir && fs.existsSync(sdkDir) ? 'OK ' + sdkDir : 'Android SDK nahi mila - Android Studio install karo (developer.android.com)',
+          sdk_ok: !!(sdkDir && fs.existsSync(sdkDir)),
+          adb: adb.ok ? 'adb ready' : 'adb nahi mila',
+          summary: 'APK build ke liye: JDK 17 + Android SDK + Gradle chahiye. Missing cheezon ke install commands bhi bata sakta hoon.'
+        };
+      } else if (args.action === 'create') {
+        const appName = (args.name || 'MyApp').replace(/[^a-zA-Z0-9]/g, '') || 'MyApp';
+        const pkg = args.package || ('com.devcraft.' + appName.toLowerCase());
+        const dir = args.path || path.join(home, 'DevCraftApps', appName);
+        const T = {
+          'settings.gradle': 'pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositories { google(); mavenCentral() } }\nrootProject.name = "' + appName + '"\ninclude \'' + 'app' + '\'\n',
+          'build.gradle': 'plugins { id "com.android.application" version "8.5.2" apply false }\n',
+          'gradle.properties': 'android.useAndroidX=true\norg.gradle.jvmargs=-Xmx2048m\n',
+          'app/build.gradle': 'plugins { id "com.android.application" }\nandroid {\n  namespace "' + pkg + '"\n  compileSdk 34\n  defaultConfig { applicationId "' + pkg + '"; minSdk 21; targetSdk 34; versionCode 1; versionName "1.0" }\n  buildTypes { release { minifyEnabled false } }\n  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }\n}\n',
+          'app/src/main/AndroidManifest.xml': '<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n  <application android:label="' + appName + '" android:icon="@android:drawable/ic_menu_compass" android:theme="@android:style/Theme.Material.Light.DarkActionBar">\n    <activity android:name=".MainActivity" android:exported="true">\n      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n    </activity>\n  </application>\n</manifest>\n',
+          ['app/src/main/java/' + pkg.split('.').join('/') + '/MainActivity.java']: 'package ' + pkg + ';\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.widget.TextView;\npublic class MainActivity extends Activity {\n  @Override protected void onCreate(Bundle b) {\n    super.onCreate(b);\n    TextView tv = new TextView(this);\n    tv.setTextSize(22);\n    tv.setPadding(40, 120, 40, 40);\n    tv.setText("Hello! Ye app Dev Craft Agent ne banayi hai");\n    setContentView(tv);\n  }\n}\n'
+        };
+        for (const [f, c] of Object.entries(T)) {
+          const fp = path.join(dir, f);
+          fs.mkdirSync(path.dirname(fp), { recursive: true });
+          fs.writeFileSync(fp, c, 'utf8');
+        }
+        if (sdkDir && fs.existsSync(sdkDir)) { fs.writeFileSync(path.join(dir, 'local.properties'), 'sdk.dir=' + sdkDir.replace(/\\/g, '/') + '\n', 'utf8'); }
+        result = { ok: true, created: dir, package: pkg, files: Object.keys(T).length, note: sdkDir ? 'SDK mila - ab build action chalao' : 'SDK missing - pehle Android SDK install karo' };
+        title = '🤖 Android project banaya: ' + appName;
+      } else if (args.action === 'build') {
+        const dir = args.path;
+        title = '🤖 APK build: ' + path.basename(dir || '');
+        if (!dir || !fs.existsSync(dir)) { result = { error: 'Project folder nahi mila: ' + dir }; }
+        else {
+          if (sdkDir && fs.existsSync(sdkDir) && !fs.existsSync(path.join(dir, 'local.properties'))) fs.writeFileSync(path.join(dir, 'local.properties'), 'sdk.dir=' + sdkDir.replace(/\\/g, '/') + '\n', 'utf8');
+          const gradleCmd = IS_WIN ? 'gradle.bat' : 'gradle';
+          const w = await sh(cd(dir) + gradleCmd + ' wrapper --gradle-version 8.7', 180000);
+          if (!w.ok) result = { error: 'Gradle wrapper fail: ' + (w.error || w.output).slice(0, 300), tip: 'gradle install hai? android_project check chalao' };
+          else {
+            const buildCmd = IS_WIN ? 'gradlew.bat assembleDebug' : './gradlew assembleDebug';
+            const b = await sh(cd(dir) + buildCmd, 600000);
+            const apk = path.join(dir, 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk');
+            result = b.ok && fs.existsSync(apk)
+              ? { ok: true, apk: apk, size_mb: Math.round(fs.statSync(apk).size / 1024 / 1024 * 10) / 10, log_tail: (b.output || '').split('\n').slice(-5).join('\n') }
+              : { error: 'Build fail: ' + ((b.error || b.output || '').split('\n').slice(-8).join('\n')).slice(0, 400), tip: 'android_project check chala ke SDK/JDK verify karo' };
+          }
+        }
+      } else { result = { error: 'action: check | create | build' }; }
+    }
     else { result = { error: 'Unknown tool: ' + name }; }
   } catch (e) { result = { error: e.message }; }
   steps.push({ title, status: result && result.error && !result.ok ? 'error' : 'done', detail: (result && (result.output || result.error || result.saved || result.deleted || result.created || '') || '').toString().split('\n')[0].slice(0, 60) });
@@ -183,3 +247,6 @@ http.createServer((req, res) => {
   console.log('   AI: Settings mein OpenAI key ya local Ollama (free)\n');
   try { await openTarget('http://localhost:' + PORT); console.log('   Browser khul gaya! (na khula to manually kholo)'); } catch (e) {}
 });
+
+// (test export - production mein koi asar nahi)
+if (process.env.DCD_EXPORT) module.exports = { runTool };
