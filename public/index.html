@@ -10,15 +10,16 @@
   html, body { height: 100%; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; display: flex; overflow: hidden; }
 
-  /* ============ SIDEBAR ============ */
-  #sidebar { width: 260px; background: #1e293b; border-right: 1px solid #334155; display: flex; flex-direction: column; transition: transform 0.25s ease; z-index: 50; }
-  .side-head { padding: 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #334155; }
-  .side-head .logo { width: 34px; height: 34px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 9px; display: flex; align-items: center; justify-content: center; font-size: 17px; }
-  .side-head b { color: #f1f5f9; font-size: 14px; }
-  #newChat { margin: 12px; padding: 11px; border: none; border-radius: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
+  /* ============ TOP MENU DROPDOWN (replaces permanent sidebar) ============ */
+  #sidebar { position: fixed; top: 54px; left: 10px; width: 290px; max-height: 78vh; background: #1e293b; border: 1px solid #334155; border-radius: 14px; box-shadow: 0 12px 32px rgba(0,0,0,0.45); display: flex; flex-direction: column; overflow: hidden; z-index: 60; opacity: 0; transform: translateY(-8px) scale(0.98); pointer-events: none; transition: opacity .16s ease, transform .16s ease; }
+  #sidebar.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
+  .menu-item { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: #e2e8f0; font-size: 14px; cursor: pointer; border-bottom: 1px solid #334155; }
+  .menu-item:hover { background: #334155; }
+  .menu-item .ic { font-size: 16px; width: 18px; text-align: center; }
+  #newChat { margin: 10px 12px; padding: 11px; border: none; border-radius: 10px; background: linear-gradient(135deg, #6366f1, #8b5cf6); color: white; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
   #newChat:hover { filter: brightness(1.1); }
-  .side-label { padding: 4px 16px 6px; color: #64748b; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
-  #convList { flex: 1; overflow-y: auto; padding: 0 8px; }
+  .side-label { padding: 8px 16px 6px; color: #64748b; font-size: 11px; font-weight: 600; letter-spacing: 0.5px; }
+  #convList { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
   .conv-item { display: flex; align-items: center; padding: 10px 10px; border-radius: 8px; color: #cbd5e1; font-size: 13px; cursor: pointer; margin-bottom: 2px; white-space: nowrap; overflow: hidden; }
   .conv-item:hover { background: #334155; }
   .conv-item.active { background: #334155; color: white; }
@@ -26,12 +27,13 @@
   .conv-item .del { color: #64748b; padding: 2px 6px; border-radius: 5px; visibility: hidden; }
   .conv-item:hover .del { visibility: visible; }
   .conv-item .del:hover { color: #f87171; background: rgba(248,113,113,0.1); }
-  .side-foot { padding: 12px; border-top: 1px solid #334155; color: #64748b; font-size: 11px; text-align: center; }
 
   /* ============ MAIN ============ */
   #main { flex: 1; display: flex; flex-direction: column; min-width: 0; height: 100vh; }
-  #topbar { background: #1e293b; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #334155; }
-  #hamburger { display: none; background: none; border: none; color: #cbd5e1; font-size: 20px; cursor: pointer; padding: 6px; }
+  #topbar { background: #1e293b; padding: 10px 14px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #334155; position: relative; z-index: 55; }
+  #hamburger { display: flex; align-items: center; justify-content: center; background: none; border: none; color: #cbd5e1; font-size: 20px; cursor: pointer; padding: 6px; border-radius: 8px; }
+  #hamburger:hover, #hamburger.active { background: #334155; }
+  .topbar-logo { width: 26px; height: 26px; background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 13px; flex-shrink: 0; }
   #topbar h1 { color: #f1f5f9; font-size: 15px; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .status { color: #4ade80; font-size: 11px; display: flex; align-items: center; gap: 5px; white-space: nowrap; }
   .status::before { content: ''; width: 7px; height: 7px; background: #4ade80; border-radius: 50%; animation: pulse 2s infinite; }
@@ -70,12 +72,10 @@
   #send:disabled { opacity: 0.5; }
 
   /* ============ MOBILE (768px se neeche) ============ */
-  #backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 40; }
+  #backdrop { display: none; position: fixed; inset: 0; background: transparent; z-index: 58; }
+  #backdrop.show { display: block; }
   @media (max-width: 768px) {
-    #sidebar { position: fixed; left: 0; top: 0; bottom: 0; transform: translateX(-100%); width: 280px; }
-    #sidebar.open { transform: translateX(0); box-shadow: 4px 0 20px rgba(0,0,0,0.4); }
-    #backdrop.show { display: block; }
-    #hamburger { display: block; }
+    #sidebar { left: 8px; right: 8px; width: auto; }
     .msg { max-width: 88%; }
     #chat { padding: 12px; }
     .welcome h2 { font-size: 17px; }
@@ -86,24 +86,21 @@
 </head>
 <body>
 
-  <!-- SIDEBAR -->
+  <!-- DROPDOWN MENU (hamburger se khulta hai) -->
   <aside id="sidebar">
-    <div class="side-head">
-      <div class="logo">🤖</div>
-      <b>Dev Craft Agent</b>
-    </div>
+    <div class="menu-item" onclick="goHome()"><span class="ic">🏠</span> Homepage</div>
     <button id="newChat" onclick="newChat()">＋ New Chat</button>
-    <div class="side-label">HISTORY</div>
+    <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
-    <div class="side-foot">Mobile • Laptop • Tablet — sab pe chalta hai</div>
   </aside>
-  <div id="backdrop" onclick="toggleSidebar()"></div>
+  <div id="backdrop" onclick="toggleSidebar(false)"></div>
 
   <!-- MAIN -->
   <div id="main">
     <div id="topbar">
       <button id="hamburger" onclick="toggleSidebar()">☰</button>
-      <h1 id="chatTitle">New Chat</h1>
+      <div class="topbar-logo">🤖</div>
+      <h1 id="chatTitle">Dev Craft Agent</h1>
       <span class="status">Live</span>
       <button class="ctrl-btn" id="voiceOut" onclick="toggleVoice()">🔊</button>
       <button class="ctrl-btn" onclick="clearCurrent()">🗑</button>
@@ -150,7 +147,7 @@
   function renderChat() {
     const c = current();
     chat.innerHTML = '';
-    document.getElementById('chatTitle').textContent = c ? c.title : 'New Chat';
+    document.getElementById('chatTitle').textContent = c ? c.title : 'Dev Craft Agent';
     if (!c || !c.messages.length) {
       chat.innerHTML = `<div class="welcome">
         <div class="big">🤖</div>
@@ -228,13 +225,20 @@
     conversations.push(conv);
     currentId = conv.id;
     save(); renderSidebar(); renderChat();
-    if (window.innerWidth <= 768) toggleSidebar(false);
+    toggleSidebar(false);
     input.focus();
   }
 
   function loadConv(id) {
     currentId = id; save(); renderSidebar(); renderChat();
-    if (window.innerWidth <= 768) toggleSidebar(false);
+    toggleSidebar(false);
+  }
+
+  function goHome() {
+    currentId = null;
+    save(); renderSidebar(); renderChat();
+    document.getElementById('chatTitle').textContent = 'Dev Craft Agent';
+    toggleSidebar(false);
   }
 
   function deleteConv(id) {
@@ -316,13 +320,15 @@
     recognition.start();
   }
 
-  // ====== SIDEBAR (mobile) ======
+  // ====== TOP MENU DROPDOWN ======
   function toggleSidebar(force) {
     const sb = document.getElementById('sidebar');
     const bd = document.getElementById('backdrop');
+    const hb = document.getElementById('hamburger');
     const open = force !== undefined ? force : !sb.classList.contains('open');
     sb.classList.toggle('open', open);
     bd.classList.toggle('show', open);
+    hb.classList.toggle('active', open);
   }
 
   // ====== INPUT auto-resize ======
