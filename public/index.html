@@ -270,6 +270,9 @@
   let voiceEnabled = true, listening = false, busy = false;
   let connectView = false, currentOS = 'windows';
   let settings = JSON.parse(localStorage.getItem('dc_settings') || '{}');
+  // har browser ka apna user id - is se HAR USER ka credential vault alag rehta hai
+  let uid = localStorage.getItem('dc_user_id');
+  if (!uid) { uid = 'u_' + (crypto.randomUUID ? crypto.randomUUID() : 'x' + Date.now() + Math.random().toString(36).slice(2)); localStorage.setItem('dc_user_id', uid); }
   let pairedCode = localStorage.getItem('dc_pair_code') || null;
   let pairDeviceId = localStorage.getItem('dc_pair_device') || null;
   let pcTimer = null;
@@ -468,7 +471,7 @@
     chat.scrollTop = chat.scrollHeight;
 
     try {
-      const payload = { message: text, history: c.messages.slice(-10) };
+      const payload = { message: text, history: c.messages.slice(-10), user_id: uid };
       if (settings.provider === 'ollama') { payload.provider = 'ollama'; payload.model = settings.ollama_model; payload.device_id = settings.device_id; }
       else if (settings.provider === 'openrouter') { payload.provider = 'openrouter'; payload.api_key = settings.or_key; payload.model = settings.or_model; }
       else if (settings.provider === 'custom') { payload.provider = 'custom'; payload.api_key = settings.custom_key; payload.base_url = settings.base_url; payload.model = settings.custom_model; }

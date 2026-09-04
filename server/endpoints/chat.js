@@ -45,6 +45,7 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 - "mere tokens dikhao" => list_credentials. "ye token hatao" => delete_credential (pehle confirm karo).
 - Save hone par user ko bolo: "encrypted ho kar save ho gaya ✅ (main sirf masked dikha sakta hoon)". Token kabhi wapas plain text mein mat likhna - sirf pehle 4 aur aakhri 4 characters.
 - Jab bhi kisi tool mein token chahiye (GitHub repo banana, Notion entry, Stripe link, Telegram), PEHLE check karo - saved credential hota to khud use karo aur user ko bolna nahi padta. Vault empty ho to user se token maango.
+- PER-USER: har user ka vault ALAG hai (user_id ke hisaab se). Ek user ka token doosre user ko kabhi nahi dikhta/milta. list_credentials sirf usi user ke tokens dikhata hai jo chat kar raha hai.
 - SECURITY: tokens chat log mein store nahi hote tumhare, sirf vault mein encrypted. User ka token kisi third party ko kabhi mat dena.
 
 ## AGENCY RULES:
@@ -190,11 +191,12 @@ async function runTool(name, args, steps) {
     if (result === null) return JSON.stringify({ error: 'PC se jawab nahi aaya (timeout) - bridge chal raha hai? command: ' + args.command });
     return JSON.stringify(result);
   }
-  if (name === 'save_credential') { epName = null; const r = await vault.saveCredential(args.name, args.value, args.description); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : (r.saved + ' ' + (r.masked || '')); return JSON.stringify(r); }
-  if (name === 'list_credentials') { epName = null; const r = await vault.listCredentials(); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.credentials || []).length + ' saved'); return JSON.stringify(r); }
-  if (name === 'delete_credential') { epName = null; const r = await vault.deleteCredential(args.name); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'deleted'; return JSON.stringify(r); }
+  if (name === 'save_credential') { epName = null; const r = await vault.saveCredential(args.name, args.value, args.description, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : (r.saved + ' ' + (r.masked || '')); return JSON.stringify(r); }
+  if (name === 'list_credentials') { epName = null; const r = await vault.listCredentials(uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.credentials || []).length + ' saved'); return JSON.stringify(r); }
+  if (name === 'delete_credential') { epName = null; const r = await vault.deleteCredential(args.name, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'deleted'; return JSON.stringify(r); }
   if (name === 'list_automations') { epName = 'automations'; body = { action: 'list' }; }
   if (name === 'delete_automation') { epName = 'automations'; body = { action: 'delete', id: args.id }; }
+  if (epName && uid && uid !== 'owner') body.user_id = uid; // github/notion/stripe waghera bhi user-scoped vault padhein
   const r = await callEndpoint(epName, body);
   const ok = r.status < 400 && !(r.data && r.data.error);
   step.status = ok ? 'done' : 'error';
@@ -212,7 +214,8 @@ const handler = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
-  const { message, history, api_key, provider, model, device_id } = req.body || {};
+  const { message, history, api_key, provider, model, device_id, user_id } = req.body || {};
+  const uid = String(user_id || 'owner').trim() || 'owner'; // har user ka apna credential vault
 
   // ---- OLLAMA (local PC) mode: bridge ke through local model ----
   if (provider === 'ollama') {

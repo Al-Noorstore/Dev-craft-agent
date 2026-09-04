@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
   try {
     const { query, max_results } = req.body || {};
     if (!query) return res.status(400).json({ error: 'query required, e.g. "need a web designer"' });
-    const VAULT_TWITTER_TOKEN = await vault.getCredential('TWITTER_BEARER_TOKEN');
+    const VAULT_TWITTER_TOKEN = await vault.getCredential('TWITTER_BEARER_TOKEN', req.body.user_id);
     if (!VAULT_TWITTER_TOKEN) {
       return res.status(500).json({
         error: 'Twitter not configured',

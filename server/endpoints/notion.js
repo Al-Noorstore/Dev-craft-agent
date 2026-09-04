@@ -20,8 +20,8 @@ module.exports = async (req, res) => {
   try {
     const { title, notes, status } = req.body || {};
     if (!title) return res.status(400).json({ error: 'title is required' });
-    const VAULT_NOTION_TOKEN = await vault.getCredential('NOTION_TOKEN');
-    const VAULT_NOTION_DB = await vault.getCredential('NOTION_DATABASE_ID');
+    const VAULT_NOTION_TOKEN = await vault.getCredential('NOTION_TOKEN', req.body.user_id);
+    const VAULT_NOTION_DB = await vault.getCredential('NOTION_DATABASE_ID', req.body.user_id);
     if (!VAULT_NOTION_TOKEN || !VAULT_NOTION_DB) {
       return res.status(500).json({
         error: 'Notion not configured',

@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
   try {
     const { amount, product_name, currency, description } = req.body || {};
     if (!amount || amount <= 0) return res.status(400).json({ error: 'amount required (dollars, e.g. 299)' });
-    const VAULT_STRIPE_KEY = await vault.getCredential('STRIPE_SECRET_KEY');
+    const VAULT_STRIPE_KEY = await vault.getCredential('STRIPE_SECRET_KEY', req.body.user_id);
     if (!VAULT_STRIPE_KEY) {
       return res.status(500).json({ error: 'STRIPE_SECRET_KEY env var missing (set it in Vercel)' });
     }

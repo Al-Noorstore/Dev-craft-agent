@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Use POST' });
 
   try {
-    const TOKEN = await vault.getCredential('GITHUB_TOKEN');
+    const TOKEN = await vault.getCredential('GITHUB_TOKEN', req.body.user_id);
     if (!TOKEN) {
       return res.status(500).json({
         error: 'GitHub not configured',
