@@ -14,8 +14,6 @@
 //   VERCEL_TOKEN  => vercel.com > Account Settings > Tokens
 //   DEPLOY_SECRET => koi bhi strong password (security lock)
 // ============================================
-const crypto = require('crypto');
-
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -65,7 +63,7 @@ module.exports = async (req, res) => {
       .filter(f => f && f.name && typeof f.content === 'string' && !f.name.includes('..'))
       .map(f => {
         const data = Buffer.from(f.content, 'utf8').toString('base64');
-        return { file: f.name.replace(/^\/+/, ''), data, sha: crypto.createHash('sha1').update(data).digest('hex') };
+        return { file: f.name.replace(/^\/+/, ''), data };
       });
 
     const depRes = await fetch(`https://api.vercel.com/v13/deployments${q}`, {
