@@ -54,7 +54,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'close_app', description: 'App band karo (process kill). Process name do, e.g. "notepad", "chrome", "vlc".', parameters: { type: 'object', properties: { process_name: { type: 'string' } }, required: ['process_name'] } } },
   { type: 'function', function: { name: 'youtube', description: 'YouTube control karo: search, video open, ya YouTube band karo.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['search', 'open', 'close'], description: 'search = YouTube pe search karo (query do), open = video/channel URL kholo (url do), close = YouTube browser tab/app band' }, query: { type: 'string' }, url: { type: 'string' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'system_info', description: 'PC ki info: OS, RAM, disk, current user, IP', parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } }
+  { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } },
+  { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } }
 ];
 
 const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - running directly on the user's own laptop/PC (OpenClaw-style power user assistant). You have FULL tools:
@@ -67,7 +68,7 @@ RULES:
 4. Commands ke liye OS ke mutabiq commands use karo (Windows: dir, taskkill; Linux/Mac: ls, pkill). User ka OS: __OS__.
 5. Har tool ke result ke baad chhota summary do. Final reply concise rakho.
 6. YouTube search: youtube tool {action:"search", query}. App kholna: open_app. Band karna: close_app (process name).
-7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
+7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).\n9. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
 
 function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
 
@@ -152,6 +153,82 @@ async function runTool(name, args, steps) {
           }
         }
       } else { result = { error: 'action: check | create | build' }; }
+    }
+    else if (name === 'package_app') {
+      const home = os.homedir();
+      const target = args.path;
+      if (!target || !fs.existsSync(target)) { result = { error: 'Path nahi mila: ' + target }; }
+      else if (args.action === 'to_exe') {
+        title = '📦 EXE ban rahi hai: ' + path.basename(target);
+        const isDir = fs.statSync(target).isDirectory();
+        let entry = args.entry ? path.join(isDir ? target : path.dirname(target), args.entry) : null;
+        if (isDir && !entry) for (const c of ['app.js', 'index.js', 'main.js']) { const f = path.join(target, c); if (fs.existsSync(f)) { entry = f; break; } }
+        if (entry && fs.existsSync(entry) && entry.endsWith('.js')) {
+          // Node script -> standalone EXE (pkg)
+          const out = path.join(isDir ? target : path.dirname(target), path.basename(entry, '.js') + (IS_WIN ? '.exe' : '-bin'));
+          const r = await sh('npx --yes pkg "' + entry + '" --output "' + out + '"', 420000);
+          result = r.ok && fs.existsSync(out)
+            ? { ok: true, exe: out, size_mb: Math.round(fs.statSync(out).size / 1024 / 1024 * 10) / 10, note: 'Standalone EXE - Node install kiye bina chalegi (same OS pe)' }
+            : { error: 'pkg se EXE nahi bani: ' + (r.error || r.output || '').split('\n').slice(-4).join(' ').slice(0, 300), tip: 'Alternatives: "npm i -g pkg" try karo, ya pyinstaller (python), ya 7-Zip SFX (folder)' };
+        } else if (entry && fs.existsSync(entry) && entry.endsWith('.py')) {
+          const r = await sh('pip install pyinstaller --quiet && pyinstaller --onefile "' + entry + '" --distpath "' + (isDir ? target : path.dirname(target)) + '"', 420000);
+          const out = path.join(isDir ? target : path.dirname(target), path.basename(entry, '.py') + (IS_WIN ? '.exe' : ''));
+          result = r.ok && fs.existsSync(out) ? { ok: true, exe: out } : { error: 'PyInstaller fail: ' + (r.error || '').slice(0, 200), tip: 'pip install pyinstaller' };
+        } else {
+          // Koi bhi folder -> self-extracting EXE (7-Zip SFX)
+          const z7 = (await sh(IS_WIN ? 'where 7z 2>nul || echo "%ProgramFiles%\\7-Zip\\7z.exe"' : 'which 7z 7za 2>/dev/null', 8000));
+          const z7path = (z7.output || '').split('\n')[0].replace(/^"|"$/g, '').trim();
+          if (z7path && fs.existsSync(z7path)) {
+            const out = target.replace(/[\\/]$/, '') + '.exe';
+            const r = await sh('"' + z7path + '" a -sfx "' + out + '" "' + target + '"', 300000);
+            result = r.ok && fs.existsSync(out) ? { ok: true, exe: out, size_mb: Math.round(fs.statSync(out).size / 1024 / 1024 * 10) / 10, note: 'Self-extracting EXE - double-click se folder khud extract hoga' } : { error: '7z SFX fail: ' + (r.error || '').slice(0, 200) };
+          } else {
+            result = { error: '7-Zip nahi mila', tip: IS_WIN ? 'Install: winget install 7zip.7zip (ya 7-zip.org) phir dobara try karo' : 'Install: sudo apt install p7zip-full' };
+          }
+        }
+      } else if (args.action === 'to_apk') {
+        const isAndroid = fs.existsSync(path.join(target, 'app', 'src', 'main', 'AndroidManifest.xml'));
+        if (isAndroid) {
+          title = '📦 APK build (Android project)';
+          result = JSON.parse(await runTool('android_project', { action: 'build', path: target }, steps));
+          if (result.ok) title = '📦 APK ban gayi: ' + (result.size_mb || '?') + ' MB';
+        } else {
+          // HTML/website folder -> WebView wrapper app -> APK
+          title = '📦 HTML folder → APK (WebView app)';
+          const htmlOk = fs.existsSync(path.join(target, 'index.html')) || (fs.readdirSync(target).some(f => f.endsWith('.html')));
+          if (!htmlOk) { result = { error: 'Is folder mein HTML file nahi milo - website folder do (index.html wala) ya Android project folder' }; }
+          else {
+            const appName = (args.name || path.basename(target)).replace(/[^a-zA-Z0-9]/g, '') || 'WebApp';
+            const pkg = args.package || ('com.devcraft.' + appName.toLowerCase());
+            const dir = path.join(home, 'DevCraftApps', appName + '-apk');
+            const T = {
+              'settings.gradle': 'pluginManagement { repositories { google(); mavenCentral(); gradlePluginPortal() } }\ndependencyResolutionManagement { repositories { google(); mavenCentral() } }\nrootProject.name = "' + appName + '"\ninclude \'' + 'app' + '\'\n',
+              'build.gradle': 'plugins { id "com.android.application" version "8.5.2" apply false }\n',
+              'gradle.properties': 'android.useAndroidX=true\n',
+              'app/build.gradle': 'plugins { id "com.android.application" }\nandroid {\n  namespace "' + pkg + '"\n  compileSdk 34\n  defaultConfig { applicationId "' + pkg + '"; minSdk 21; targetSdk 34; versionCode 1; versionName "1.0" }\n  buildTypes { release { minifyEnabled false } }\n  compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }\n}\n',
+              'app/src/main/AndroidManifest.xml': '<?xml version="1.0" encoding="utf-8"?>\n<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n  <uses-permission android:name="android.permission.INTERNET"/>\n  <application android:label="' + appName + '" android:icon="@android:drawable/ic_menu_compass" android:theme="@android:style/Theme.Material.Light.NoActionBar">\n    <activity android:name=".MainActivity" android:exported="true" android:configChanges="orientation|screenSize">\n      <intent-filter><action android:name="android.intent.action.MAIN"/><category android:name="android.intent.category.LAUNCHER"/></intent-filter>\n    </activity>\n  </application>\n</manifest>\n',
+              ['app/src/main/java/' + pkg.split('.').join('/') + '/MainActivity.java']: 'package ' + pkg + ';\nimport android.app.Activity;\nimport android.os.Bundle;\nimport android.webkit.WebView;\nimport android.webkit.WebViewClient;\npublic class MainActivity extends Activity {\n  WebView wv;\n  @Override protected void onCreate(Bundle b) {\n    super.onCreate(b);\n    wv = new WebView(this);\n    wv.getSettings().setJavaScriptEnabled(true);\n    wv.getSettings().setDomStorageEnabled(true);\n    wv.setWebViewClient(new WebViewClient());\n    wv.loadUrl("file:///android_asset/index.html");\n    setContentView(wv);\n  }\n  @Override public void onBackPressed() { if (wv != null && wv.canGoBack()) wv.goBack(); else super.onBackPressed(); }\n}\n'
+            };
+            for (const [f, c] of Object.entries(T)) { const fp = path.join(dir, f); fs.mkdirSync(path.dirname(fp), { recursive: true }); fs.writeFileSync(fp, c, 'utf8'); }
+            // HTML folder -> assets mein copy (node_modules/.git skip)
+            const assets = path.join(dir, 'app', 'src', 'main', 'assets');
+            fs.mkdirSync(assets, { recursive: true });
+            const skip = new Set(['node_modules', '.git', '.gradle', 'build']);
+            (function copy(src, dstp) {
+              for (const item of fs.readdirSync(src)) {
+                if (skip.has(item)) continue;
+                const sp = path.join(src, item), dp = path.join(dstp, item);
+                if (fs.statSync(sp).isDirectory()) { fs.mkdirSync(dp, { recursive: true }); copy(sp, dp); }
+                else fs.copyFileSync(sp, dp);
+              }
+            })(target, assets);
+            result = { ok: true, project: dir, note: 'WebView app ban gayi - ab build chal rahi hai...' };
+            const build = JSON.parse(await runTool('android_project', { action: 'build', path: dir }, steps));
+            result = build.ok ? build : Object.assign({ wrapper: dir }, build);
+            if (build.ok) title = '📦 APK ban gayi: ' + (build.size_mb || '?') + ' MB';
+          }
+        }
+      } else { result = { error: 'action: to_exe | to_apk' }; }
     }
     else { result = { error: 'Unknown tool: ' + name }; }
   } catch (e) { result = { error: e.message }; }
