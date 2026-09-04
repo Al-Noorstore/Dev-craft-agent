@@ -2,6 +2,7 @@
 // FILE TOOLS - /api/files
 // Ek endpoint, 5 kaam (user uploads ko process karta hai):
 // POST { "action": "unzip", "zip_base64": "..." }        => zip kholo: files list + text files ka content
+// POST { "action": "zip", "files": [{name, content}] }     => files ko zip mein pack karo (base64 return)
 // POST { "action": "csv_parse", "csv": "a,b,c\n1,2,3" }  => CSV => JSON
 // POST { "action": "csv_create", "json": [{...},{...}] } => JSON => CSV
 // POST { "action": "pdf_read", "pdf_base64": "..." }     => PDF => text
@@ -80,6 +81,31 @@ module.exports = async (req, res) => {
       return res.json({ success: true, file_count: files.length, files });
     }
 
+    // ---------- ZIP CREATE (files => zip) ----------
+    if (action === 'zip') {
+      // POST { "action": "zip", "files": [{"name": "index.html", "content": "..."}, ...], "zip_name": "my-site" (optional) }
+      // Text files ko zip mein pack karke base64 return karta hai
+      const { files: inFiles, zip_name } = req.body;
+      if (!Array.isArray(inFiles) || !inFiles.length) return res.status(400).json({ error: 'files required: [{name, content}]' });
+      if (inFiles.length > 200) return res.status(400).json({ error: 'max 200 files' });
+      const zip = new JSZip();
+      for (const f of inFiles) {
+        if (!f || !f.name || typeof f.content !== 'string') return res.status(400).json({ error: 'each file needs name + content (text only)' });
+        if (f.name.includes('..')) continue; // path safety
+        zip.file(f.name.replace(/^\/+/, ''), f.content);
+      }
+      const buf = await zip.generateAsync({ type: 'nodebuffer', compression: 'DEFLATE' });
+      if (buf.length > 8 * 1024 * 1024) return res.status(400).json({ error: 'zip too large (max 8MB)' });
+      return res.json({
+        success: true,
+        zip_name: (zip_name || 'project') + '.zip',
+        file_count: inFiles.length,
+        size_bytes: buf.length,
+        zip_base64: buf.toString('base64'),
+        note: 'Download ke liye: base64 ko .zip file mein save karo'
+      });
+    }
+
     // ---------- CSV PARSE ----------
     if (action === 'csv_parse') {
       const { csv } = req.body;
@@ -135,7 +161,7 @@ module.exports = async (req, res) => {
       return res.json({ success: true, analysis: completion.choices[0].message.content });
     }
 
-    res.status(400).json({ error: 'action required: unzip | csv_parse | csv_create | pdf_read | image_read' });
+    res.status(400).json({ error: 'action required: unzip | zip | csv_parse | csv_create | pdf_read | image_read' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }

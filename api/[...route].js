@@ -8,6 +8,7 @@ const routes = {
   'audit': require('../server/endpoints/audit.js'),
   'chat': require('../server/endpoints/chat.js'),
   'clone-site': require('../server/endpoints/clone-site.js'),
+  'deploy-vercel': require('../server/endpoints/deploy-vercel.js'),
   'discord': require('../server/endpoints/discord.js'),
   'draft-email': require('../server/endpoints/draft-email.js'),
   'drive': require('../server/endpoints/drive.js'),
@@ -28,7 +29,6 @@ const routes = {
   'stripe-payment': require('../server/endpoints/stripe-payment.js'),
   'telegram': require('../server/endpoints/telegram.js'),
   'twitter': require('../server/endpoints/twitter.js'),
-  'v1/chat/completions': require('../server/endpoints/v1/chat/completions.js'),
   'whatsapp': require('../server/endpoints/whatsapp.js'),
 };
 
