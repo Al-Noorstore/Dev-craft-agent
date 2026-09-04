@@ -122,6 +122,16 @@
   .primary-btn:hover { background: var(--primary-dark); }
   .pairing-code { font-size: 26px; font-weight: 800; letter-spacing: 4px; color: var(--primary); text-align: center; background: var(--pill-bg); border-radius: 10px; padding: 12px; margin: 10px 0; font-family: ui-monospace, Menlo, monospace; }
 
+  .dl-os-grid { display:grid; grid-template-columns:repeat(2,1fr); gap:10px; margin-bottom:16px; }
+  .dl-os-card { background:var(--card); border:2px solid var(--border); border-radius:14px; padding:16px; text-align:center; cursor:pointer; transition:all .15s; font-size:13px; }
+  .dl-os-card.active { border-color:var(--primary); box-shadow:0 4px 14px rgba(20,168,120,.12); }
+  .dl-os-card .osic { font-size:26px; display:block; margin-bottom:6px; }
+  .dl-os-card b { display:block; }
+  .dl-os-card .ver { color:var(--text-muted); font-size:11px; margin-top:2px; }
+  .dl-btn-big { display:block; text-align:center; background:var(--primary); color:#fff; border-radius:12px; padding:14px; font-size:15px; font-weight:800; text-decoration:none; margin:14px 0; }
+  .dl-btn-big:hover { background:var(--primary-dark); }
+  @media (max-width:768px) { .dl-os-grid { grid-template-columns:1fr; } }
+
   /* ============ SETTINGS MODAL ============ */
   #settingsModal { position: fixed; inset: 0; background: rgba(17,24,39,.45); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
   #settingsModal.open { display: flex; }
@@ -162,6 +172,7 @@
     </div>
     <div class="menu-item" onclick="clearCurrent()"><span class="ic">🗑</span> Clear this chat</div>
     <div class="menu-item" onclick="showConnect()"><span class="ic">💻</span> Connect PC <span id="pcDot" style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:#d1d5db"></span></div>
+    <div class="menu-item" onclick="showDownload()"><span class="ic">⬇️</span> Download App</div>
     <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
     <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
@@ -500,6 +511,60 @@
       input.focus();
     };
     el.click();
+  }
+
+  // ====== DOWNLOAD APP ======
+  const DESKTOP_ZIP = 'https://base44.app/api/apps/6a9acc86089c2efefd4b0adc/files/mp/public/6a9acc86089c2efefd4b0adc/3eedf8cfc_DevCraft-Desktop-v1.zip';
+  const DL_GUIDES = {
+    windows: { icon: '🪟', name: 'Windows', ver: 'Windows 10 / 11', steps: [
+      '<b>Download App</b> button se ZIP download karo (neeche hai)',
+      'ZIP ko <b>Extract</b> karo (right-click > Extract All)',
+      'Extract kiye folder mein <b>start-windows.bat</b> pe double-click karo <i>(Smart Screen aaye to: More info > Run anyway)</i>',
+      'Browser mein app khud khul jayegi — http://localhost:3155'
+    ]},
+    linux: { icon: '🐧', name: 'Linux / Ubuntu', ver: 'Debian, Ubuntu, Mint...', steps: [
+      '<b>Download App</b> button se ZIP download karo',
+      'Extract karo aur Terminal mein folder mein jao: <b>cd Downloads/DevCraft-Desktop</b>',
+      'Chalao: <b>./start-linux.sh</b> (ya: node app.js)',
+      'Browser mein kholo: http://localhost:3155'
+    ]},
+    mac: { icon: '🍎', name: 'macOS', ver: 'macOS 12+', steps: [
+      '<b>Download App</b> button se ZIP download karo',
+      'Extract karo, Terminal mein folder mein jao: <b>cd Downloads/DevCraft-Desktop</b>',
+      'Chalao: <b>node app.js</b>',
+      'Browser mein kholo: http://localhost:3155'
+    ]},
+    mobile: { icon: '📱', name: 'Android / iPhone', ver: 'Mobile browsers', steps: [
+      'Mobile pe desktop app nahi chalti — lekin <b>web version mobile browser mein 100% chalta hai</b> (yehi jo tum use kar rahe ho!)',
+      'Browser menu > <b>"Add to Home Screen"</b> dabao',
+      'Home screen pe app icon ban jayegi — ek tap mein open',
+      'Chat, leads, emails — sab mobile pe kaam karega'
+    ]}
+  };
+
+  function showDownload() {
+    connectView = false;
+    toggleSidebar(false);
+    renderDownload('windows');
+  }
+
+  function renderDownload(os) {
+    const g = DL_GUIDES[os];
+    chat.innerHTML = '<div class="connect-page">' +
+      '<h2>⬇️ Download App</h2>' +
+      '<p class="sub">Dev Craft Agent Desktop — OpenClaw powers ke saath: terminal, files/folders edit+delete, apps open/close, YouTube control. Apna OS select karo:</p>' +
+      '<div class="dl-os-grid">' +
+        Object.keys(DL_GUIDES).map(k => '<div class="dl-os-card' + (k === os ? ' active' : '') + '" onclick="renderDownload(\'' + k + '\')"><span class="osic">' + DL_GUIDES[k].icon + '</span><b>' + DL_GUIDES[k].name + '</b><span class="ver">' + DL_GUIDES[k].ver + '</span></div>').join('') +
+      '</div>' +
+      '<div class="guide-box"><h3>' + g.icon + ' ' + g.name + ' — Install Steps</h3>' +
+        g.steps.map((st, i) => '<div class="gstep"><span class="n">' + (i + 1) + '</span><span>' + st + '</span></div>').join('') +
+      '</div>' +
+      (os === 'mobile'
+        ? '<p class="sub" style="margin-top:12px">💡 Mobile pe web version hi best hai — "Add to Home Screen" karo!</p>'
+        : '<a class="dl-btn-big" href="' + DESKTOP_ZIP + '" download="DevCraft-Desktop-v1.zip">⬇️ Download App (v1 — ZIP, ~10 KB)</a>' +
+          '<p class="sub">✅ No installation • Node.js 18+ chahiye (nodejs.org) • Data sirf tumhare PC pe • Free</p>') +
+      '<p class="sub" style="margin-top:10px">⚙️ App ke andar Settings mein <b>Ollama (free)</b> ya apni <b>OpenAI key</b> daalna hai — phir agent ready!</p>' +
+    '</div>';
   }
 
   // ====== CONNECT PC ======
