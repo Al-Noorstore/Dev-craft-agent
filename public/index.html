@@ -32,6 +32,18 @@
   #newChat:hover { background: var(--primary-dark); }
   .side-label { padding: 10px 16px 6px; color: var(--text-faint); font-size: 11px; font-weight: 700; letter-spacing: 0.5px; }
   #convList { flex: 1; overflow-y: auto; padding: 0 8px 8px; }
+  /* ChatGPT-style account bar (sidebar bottom) */
+  #acctWrap { border-top: 1px solid var(--border); background: var(--pill-bg); position: relative; }
+  #acctBar { display: flex; align-items: center; gap: 10px; padding: 11px 14px; cursor: pointer; }
+  #acctBar:hover { background: rgba(0,0,0,.04); }
+  #acctAvatar { width: 32px; height: 32px; border-radius: 50%; background: var(--primary); color: white; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; flex: 0 0 auto; }
+  #acctName { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #acctEmail { font-size: 11px; color: var(--text-faint); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #acctPop { display: none; position: absolute; bottom: calc(100% + 6px); left: 10px; right: 10px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(17,24,39,.18); padding: 6px; z-index: 80; }
+  #acctPop.open { display: block; }
+  #acctPopEmailRow { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 12px; color: var(--text); border-radius: 8px; word-break: break-all; }
+  #acctPopOut { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 13px; color: #e11d48; cursor: pointer; border-radius: 8px; font-weight: 600; }
+  #acctPopOut:hover { background: rgba(225,29,72,.08); }
   .conv-item { display: flex; align-items: center; padding: 10px 10px; border-radius: 10px; color: var(--text-muted); font-size: 13px; cursor: pointer; margin-bottom: 2px; white-space: nowrap; overflow: hidden; }
   .conv-item:hover { background: var(--bg); }
   .conv-item.active { background: #e8f6ef; color: var(--primary-dark); font-weight: 600; }
@@ -176,10 +188,23 @@
     <div class="menu-item" onclick="showConnect()"><span class="ic">💻</span> Connect PC <span id="pcDot" style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:#d1d5db"></span></div>
     <div class="menu-item" onclick="showMcp()"><span class="ic">🔌</span> Connect MCP</div>
     <div class="menu-item" onclick="showDownload()"><span class="ic">⬇️</span> Download App</div>
-    <div class="menu-item" id="authItem" onclick="authClick()" style="display:none"><span class="ic">🔑</span> Sign in with Google</div>
     <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
     <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
+    <div id="acctWrap" style="display:none">
+      <div id="acctBar" onclick="acctClick(event)">
+        <div id="acctAvatar">?</div>
+        <div style="flex:1;overflow:hidden">
+          <div id="acctName">Sign in</div>
+          <div id="acctEmail">Google account se login karo</div>
+        </div>
+        <svg id="acctChev" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity:.5;flex:0 0 auto"><path d="M6 9l6 6 6-6"/></svg>
+      </div>
+      <div id="acctPop">
+        <div id="acctPopEmailRow"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 6L2 7"/></svg><span id="acctPopEmail"></span></div>
+        <div id="acctPopOut" onclick="event.stopPropagation();signOutNow()"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></svg> Log out</div>
+      </div>
+    </div>
   </aside>
   
   <!-- MCP MODAL -->
@@ -820,7 +845,7 @@
   }
 
   // ================= GOOGLE AUTH (Supabase) =================
-  let sbClient = null, accessToken = null, authUser = null;
+  let sbClient = null, accessToken = null, authUser = null, googleOn = true;
   async function initAuth() {
     try {
       const r = await fetch('/api/config');
@@ -835,6 +860,12 @@
         });
       }
       sbClient = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
+      // google provider on hai? (public auth settings)
+      try {
+        const sr = await fetch(cfg.supabase_url + '/auth/v1/settings');
+        const sd = await sr.json();
+        googleOn = !!(sd && sd.external && sd.external.google);
+      } catch (e) {}
       sbClient.auth.onAuthStateChange((_ev, session) => applySession(session));
       const { data } = await sbClient.auth.getSession();
       applySession(data && data.session);
@@ -850,18 +881,46 @@
       accessToken = null;
       uid = localStorage.getItem('dc_user_id') || uid; // anonymous device fallback
     }
-    const item = document.getElementById('authItem');
-    if (item) {
-      item.style.display = 'flex';
-      if (authUser) {
-        const name = (authUser.user_metadata && authUser.user_metadata.full_name) || authUser.email || 'Signed in';
-        item.innerHTML = '<span class="ic">🟢</span> <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px" title="' + (authUser.email || '') + '">' + name + '</span> <span style="margin-left:auto;font-size:11px;color:#e11d48" onclick="event.stopPropagation();signOutNow()">Sign out</span>';
-      } else {
-        item.innerHTML = '<span class="ic">🔑</span> Sign in with Google';
-      }
+    renderAcctBar();
+  }
+  // ===== ChatGPT-style account bar (bottom) =====
+  function renderAcctBar() {
+    const wrap = document.getElementById('acctWrap');
+    if (!wrap) return;
+    wrap.style.display = 'block';
+    const av = document.getElementById('acctAvatar');
+    const nm = document.getElementById('acctName');
+    const em = document.getElementById('acctEmail');
+    const chev = document.getElementById('acctChev');
+    if (authUser) {
+      const name = (authUser.user_metadata && authUser.user_metadata.full_name) || authUser.email || 'User';
+      const letter = (name || 'U').trim().charAt(0).toUpperCase();
+      av.textContent = letter;
+      av.style.background = 'linear-gradient(135deg, var(--primary), #8b5cf6)';
+      nm.textContent = name;
+      nm.title = name;
+      em.textContent = authUser.email || '';
+      chev.style.display = 'block';
+      document.getElementById('acctPopEmail').textContent = authUser.email || '';
+    } else {
+      av.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>';
+      av.style.background = 'var(--text-faint)';
+      nm.textContent = 'Sign in';
+      em.textContent = 'Google account se login karo';
+      chev.style.display = 'none';
     }
   }
-  function authClick() { if (!authUser) signInGoogle(); }
+  function acctClick(ev) {
+    ev.stopPropagation();
+    if (!authUser) {
+      closeAcctPop();
+      if (!googleOn) { alert('Google login abhi enable nahi hai.\n\nSupabase Dashboard > Authentication > Providers > Google on karo (Client ID + Secret chahiye). Tab tak anonymous mode chalega.'); return; }
+      signInGoogle(); return;
+    }
+    document.getElementById('acctPop').classList.toggle('open');
+  }
+  function closeAcctPop() { const p = document.getElementById('acctPop'); if (p) p.classList.remove('open'); }
+  document.addEventListener('click', (e) => { const w = document.getElementById('acctWrap'); if (w && !w.contains(e.target)) closeAcctPop(); });
   async function signInGoogle() {
     if (!sbClient) return;
     await sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin } });
