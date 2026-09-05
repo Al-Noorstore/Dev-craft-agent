@@ -360,8 +360,8 @@ const handler = async (req, res) => {
     baseURL = String(baseURL || '').replace(/\/+$/, '');
     if (!baseURL) return res.status(400).json({ error: 'Custom API ke liye base URL chahiye' });
   }
-  // ---- GEMINI FALLBACK: koi personal key nahi magar GEMINI_API_KEY env set hai to Gemini brain use karo ----
-  if (!effKey && !api_key && !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY) {
+  // ---- GEMINI FALLBACK: koi personal key nahi to GEMINI_API_KEY env se chalo (user ki marzi: Gemini brain) ----
+  if (!effKey && !api_key && process.env.GEMINI_API_KEY) {
     effProvider = 'gemini';
     effKey = process.env.GEMINI_API_KEY;
     effModel = BRAIN_PROVIDERS.gemini.model;
