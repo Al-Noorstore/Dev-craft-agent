@@ -1,6 +1,13 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
+<head><link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#14a878">
+  <link rel="apple-touch-icon" href="/icon-192.png">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-title" content="DC Agent">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <meta name="theme-color" content="#ffffff">
@@ -635,7 +642,12 @@
         g.steps.map((st, i) => '<div class="gstep"><span class="n">' + (i + 1) + '</span><span>' + st + '</span></div>').join('') +
       '</div>' +
       (os === 'mobile'
-        ? '<p class="sub" style="margin-top:12px">💡 Mobile pe web version hi best hai — "Add to Home Screen" karo!</p>'
+        ? '<div style="margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;gap:14px">' +
+            '<img src="/icon-192.png" style="width:56px;height:56px;border-radius:14px" alt="DC Agent">' +
+            '<div style="flex:1"><div style="font-weight:800;font-size:15px">DC Agent</div><div style="font-size:12px;color:var(--text-faint)">Install karo — icon home screen pe aa jayega, ek tap mein open</div></div>' +
+            '<button class="primary-btn" style="flex:0 0 auto;padding:11px 18px" onclick="installNow(this)">📲 Install App</button>' +
+          '</div>' +
+          '<p class="sub" style="margin-top:12px">💡 <b>Android:</b> Install App dabao (ya browser menu > "Install app" / "Add to Home Screen"). <b>iPhone:</b> Safari > Share button > "Add to Home Screen".</p>'
         : '<a class="dl-btn-big" href="' + DESKTOP_ZIP + '" download="DevCraft-Desktop-v1.4.zip">⬇️ Download App (v1.4 — ZIP, ~16 KB)</a>' +
           '<p class="sub">✅ No installation • Node.js 18+ chahiye (nodejs.org) • Data sirf tumhare PC pe • Free</p>') +
       '<p class="sub" style="margin-top:10px">⚙️ App ke andar Settings mein <b>Ollama (free)</b> ya apni <b>OpenAI key</b> daalna hai — phir agent ready!</p>' +
@@ -928,6 +940,20 @@
   async function signOutNow() {
     if (sbClient) await sbClient.auth.signOut();
     applySession(null);
+  }
+  // ===== PWA INSTALL (DC Agent — Android shortcut) =====
+  let deferredPrompt = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; });
+  window.addEventListener('appinstalled', () => { deferredPrompt = null; if (typeof renderDownload === 'function' && connectView) renderDownload('mobile'); });
+  if ('serviceWorker' in navigator) { navigator.serviceWorker.register('/sw.js').catch(() => {}); }
+  async function installAndroidApp() {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      return outcome;
+    }
+    return null; // browser ne prompt nahi diya (iOS ya already installed)
   }
   initAuth();
 
