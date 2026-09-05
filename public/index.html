@@ -955,6 +955,19 @@
     }
     return null; // browser ne prompt nahi diya (iOS ya already installed)
   }
+  async function installNow(btn) {
+    const old = btn.innerHTML;
+    btn.innerHTML = '⏳ Installing...'; btn.disabled = true;
+    const outcome = await installAndroidApp();
+    if (outcome === 'accepted') {
+      btn.innerHTML = '✅ Installed!'; btn.style.background = 'var(--text-faint)';
+    } else if (outcome === 'dismissed') {
+      btn.innerHTML = old; btn.disabled = false;
+    } else {
+      btn.innerHTML = old; btn.disabled = false;
+      alert('Is browser mein direct install available nahi.\n\nAndroid: Chrome menu (⋮) > "Install app" / "Add to Home Screen"\niPhone: Safari > Share > "Add to Home Screen"');
+    }
+  }
   initAuth();
 
   function openSettings() {
