@@ -49,6 +49,13 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 - PER-USER: har user ka vault ALAG hai (user_id ke hisaab se). Ek user ka token doosre user ko kabhi nahi dikhta/milta. list_credentials sirf usi user ke tokens dikhata hai jo chat kar raha hai.
 - SECURITY: tokens chat log mein store nahi hote tumhare, sirf vault mein encrypted. User ka token kisi third party ko kabhi mat dena.
 
+## MCP SKILL (Model Context Protocol - jaise pro AI agents):
+- User "MCP connect karo" / "MCP server jodo" bole to: pehle mcp_list_servers chalao. Agar server saved nahi, to user se MCP server URL maango (aur optional auth token), phir "Connect MCP" panel se add karne ko bolo - ya batao ke sidebar > Connect MCP mein URL + token daale.
+- Server saved ho to mcp_test_server chalao - isse pata chalta hai server ke paas KAUN SE tools hain.
+- User ka kaam MCP server ke tool se ho sakta hai (Supabase queries, database edits, docs, koi bhi MCP service) to mcp_call_tool use karo: { server: naam, tool: tool ka naam, args: {} }. Tool ke params pehle test/confirm karke samjho.
+- MCP server fail ho to honest bolo: "MCP server connect nahi hua - URL/token check karo".
+- MCP ke bina bhi sab normal tools chalte hain - MCP sirf EXTRA power hai.
+
 ## AGENCY RULES:
 - Lead strategy: established business + weak website = hot lead (dental, restaurants, construction, law firms, salons).
 - Outreach: honest emails, "free homepage concept" offer. Never spam.
@@ -79,6 +86,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'save_credential', description: 'User ka API token/key/password encrypted vault mein save karo. User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'standard env-style naam, e.g. GITHUB_TOKEN' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string', description: 'chhoti note (optional)' } }, required: ['name', 'value'] } } },
   { type: 'function', function: { name: 'list_credentials', description: 'Saare saved tokens ki masked list dikhao (values nahi dikhti)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_credential', description: 'Saved token ko vault se hatao. Pehle user se confirm karo.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'mcp_list_servers', description: 'User ke saved MCP servers list karo (naam + URL)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'mcp_test_server', description: 'MCP server se connect karke uske tools ki list lao (server saved ho naam do, warna url)', parameters: { type: 'object', properties: { server: { type: 'string', description: 'saved server ka naam (optional)' }, url: { type: 'string', description: 'direct MCP URL (agar saved nahi)' } }, required: [] } } },
+  { type: 'function', function: { name: 'mcp_call_tool', description: 'User ke MCP server ka koi tool chalao (Supabase/database/docs waghera ka kaam)', parameters: { type: 'object', properties: { server: { type: 'string', description: 'saved MCP server ka naam' }, tool: { type: 'string' }, args: { type: 'object', description: 'tool ke arguments (JSON)' } }, required: ['server', 'tool'] } } },
   { type: 'function', function: { name: 'create_automation', description: 'Ek scheduled automation save karo - jo roz 9 AM PKT khud chalegi. prompt = poora kaam jo karna hai (agent khud execute karega, tools ke saath).', parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam, e.g. roz-leads-dhundo' }, prompt: { type: 'string', description: 'poora kaam jo har roz karna hai' }, schedule: { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'abhi sirf daily support hai' } }, required: ['name', 'prompt'] } } },
   { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
@@ -116,8 +126,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -172,6 +182,20 @@ async function waitBridgeJob(jobId, maxMs) {
   return null;
 }
 
+// mcp endpoint ko in-process call karo (verified uid ke saath)
+async function mcpApi(action, body) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (r) => { if (!done) { done = true; resolve(r); } };
+    const mockRes = { setHeader: () => {}, status: (c) => { mockRes._c = c; return mockRes; }, json: (d) => finish({ ...(mockRes._c && mockRes._c >= 400 ? { error: d.error || 'fail' } : d), _s: mockRes._c }), _c: 200 };
+    const mockReq = { method: 'POST', body: { action, ...body, user_id: uid }, headers: {} };
+    try {
+      Promise.resolve(endpoints.mcp(mockReq, mockRes)).catch(e => finish({ error: e.message }));
+    } catch (e) { finish({ error: e.message }); }
+    setTimeout(() => finish({ error: 'timeout' }), 45000);
+  });
+}
+
 // endpoint deploy-vercel expects { secret } — server-side inject
 async function runTool(name, args, steps) {
   const step = { title: `${STEP_ICON[name] || '⚙️'} ${STEP_TITLE[name] || name}`, status: 'working', detail: '' };
@@ -195,6 +219,9 @@ async function runTool(name, args, steps) {
   if (name === 'save_credential') { epName = null; const r = await vault.saveCredential(args.name, args.value, args.description, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : (r.saved + ' ' + (r.masked || '')); return JSON.stringify(r); }
   if (name === 'list_credentials') { epName = null; const r = await vault.listCredentials(uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.credentials || []).length + ' saved'); return JSON.stringify(r); }
   if (name === 'delete_credential') { epName = null; const r = await vault.deleteCredential(args.name, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'deleted'; return JSON.stringify(r); }
+  if (name === 'mcp_list_servers') { epName = null; const r = await mcpApi('list', {}); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.servers || []).length + ' servers'); return JSON.stringify(r); }
+  if (name === 'mcp_test_server') { epName = null; const r = await mcpApi('test', { name: args.server, url: args.url }); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.tools || []).length + ' tools mile'); return JSON.stringify(r); }
+  if (name === 'mcp_call_tool') { epName = null; const r = await mcpApi('call', { name: args.server, tool: args.tool, args: args.args || {} }); step.status = r.ok === false || r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'complete'; return JSON.stringify(r); }
   if (name === 'list_automations') { epName = 'automations'; body = { action: 'list' }; }
   if (name === 'delete_automation') { epName = 'automations'; body = { action: 'delete', id: args.id }; }
   if (epName && uid && uid !== 'owner') body.user_id = uid; // github/notion/stripe waghera bhi user-scoped vault padhein

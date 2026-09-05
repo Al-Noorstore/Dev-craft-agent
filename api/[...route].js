@@ -11,6 +11,7 @@ const routes = {
   'chat': require('../server/endpoints/chat.js'),
   'credentials': require('../server/endpoints/credentials.js'),
   'config': require('../server/endpoints/config.js'),
+  'mcp': require('../server/endpoints/mcp.js'),
   'clone-site': require('../server/endpoints/clone-site.js'),
   'deploy-vercel': require('../server/endpoints/deploy-vercel.js'),
   'discord': require('../server/endpoints/discord.js'),

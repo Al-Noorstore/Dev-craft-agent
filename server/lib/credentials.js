@@ -122,4 +122,8 @@ async function deleteCredential(name, userId) {
   return r.ok ? { ok: true, deleted: String(name).toUpperCase().trim() } : { error: 'delete fail (HTTP ' + r.status + ')' };
 }
 
-module.exports = { saveCredential, getCredential, listCredentials, deleteCredential, mask, noSupabase };
+// raw text encrypt/decrypt (MCP server tokens waghera ke liye)
+function encryptText(v) { return encrypt(v); }
+function decryptText(e, i, t) { return decrypt({ value_enc: e, iv: i, tag: t }); }
+
+module.exports = { saveCredential, getCredential, listCredentials, deleteCredential, mask, noSupabase, encryptText, decryptText };

@@ -40,6 +40,8 @@
   #send { background:var(--primary); color:#fff; border:none; border-radius:12px; width:44px; cursor:pointer; font-size:16px; }
   #send:disabled { opacity:.5; }
   .typing { color:var(--text-faint); font-style:italic; }
+  #mcpModal { position: fixed; inset: 0; background: rgba(15,15,15,.55); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #mcpModal.open { display: flex; }
   #settingsModal { position:fixed; inset:0; background:rgba(17,24,39,.45); z-index:90; display:none; align-items:center; justify-content:center; padding:16px; }
   #settingsModal.open { display:flex; }
   .set-box { background:var(--card); border-radius:16px; padding:20px; width:100%; max-width:400px; }
@@ -62,6 +64,7 @@
     <div class="logo">⚡</div>
     <h1>Dev Craft Agent <span style="color:var(--text-faint);font-weight:400">Desktop</span></h1>
     <span id="pcbadge">💻 Your PC</span>
+    <button class="icon-btn" onclick="openMcp()" title="Connect MCP"><span style="font-size:17px">🔌</span></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings"><span style="font-size:17px">⚙️</span></button>
   </div>
   <div id="chat">
@@ -129,12 +132,76 @@
     </div>
   </div>
 
+
+  <div id="mcpModal" onclick="if(event.target===this)closeMcp()">
+    <div class="set-box">
+      <h3>🔌 Connect MCP</h3>
+      <div class="set-hint" style="margin-bottom:10px">MCP server jodo — agent uske tools khud use karega. Config tumhare PC pe save hota hai (~/.dev-craft/mcp.json).</div>
+      <div id="mcpSavedList"></div>
+      <div class="set-label" style="margin-top:14px">Naya MCP server</div>
+      <input type="text" id="mcpName" class="set-input" placeholder="Naam, e.g. supabase">
+      <input type="text" id="mcpUrl" class="set-input" placeholder="MCP Server URL" style="margin-top:8px">
+      <input type="password" id="mcpToken" class="set-input" placeholder="Auth token (optional)" style="margin-top:8px">
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="btn ghost" style="width:auto" onclick="mcpTestNow()">🔍 Test</button>
+        <button class="btn save" style="flex:1" onclick="mcpSaveNow()">Connect MCP to Agent</button>
+      </div>
+      <div id="mcpTestResult" style="margin-top:10px"></div>
+      <div style="margin-top:16px"><button class="btn ghost" onclick="closeMcp()">Close</button></div>
+    </div>
+  </div>
+
 <script>
   let settings = JSON.parse(localStorage.getItem('dcd_settings') || '{}');
   let history = [], busy = false;
   const chat = document.getElementById('chat'), input = document.getElementById('input');
   if (!settings.provider) settings.provider = 'openai';
 
+  async function mcpApi(action, extra) {
+    const r = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }) });
+    return r.json();
+  }
+  function openMcp() { document.getElementById('mcpModal').classList.add('open'); loadMcp(); }
+  function closeMcp() { document.getElementById('mcpModal').classList.remove('open'); }
+  async function loadMcp() {
+    const box = document.getElementById('mcpSavedList');
+    const d = await mcpApi('list');
+    if (!d.servers || !d.servers.length) { box.innerHTML = '<div class="set-hint">Abhi koi MCP server nahi — neeche add karo 👇</div>'; return; }
+    box.innerHTML = d.servers.map(s =>
+      '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--pill-bg,#222);border-radius:10px;margin-top:6px">' +
+      '<span style="font-size:16px">🔌</span><div style="flex:1;overflow:hidden"><div style="font-weight:600;font-size:13px">' + s.name + '</div><div style="font-size:11px;opacity:.6;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">' + s.url + '</div></div>' +
+      '<button class="btn ghost" style="width:auto;padding:6px 10px;font-size:11px" onclick="mcpTestName(\'' + s.name + '\')">Test</button>' +
+      '<button class="btn ghost" style="width:auto;padding:6px 10px;font-size:11px" onclick="mcpDel(\'' + s.name + '\')">✕</button></div>').join('');
+  }
+  async function mcpSaveNow() {
+    const name = document.getElementById('mcpName').value.trim();
+    const url = document.getElementById('mcpUrl').value.trim();
+    const token = document.getElementById('mcpToken').value.trim();
+    if (!name || !url) return alert('Naam aur URL daalo');
+    const d = await mcpApi('save', { name, url, token: token || undefined });
+    if (d.error) return alert(d.error);
+    document.getElementById('mcpName').value = ''; document.getElementById('mcpUrl').value = ''; document.getElementById('mcpToken').value = '';
+    loadMcp(); document.getElementById('mcpTestResult').innerHTML = '<div class="set-hint">✅ ' + name + ' connected! Chat mein: "mere MCP servers list karo"</div>';
+  }
+  async function mcpTestNow() {
+    const url = document.getElementById('mcpUrl').value.trim();
+    const token = document.getElementById('mcpToken').value.trim();
+    document.getElementById('mcpTestResult').innerHTML = '<div class="set-hint">Connecting...</div>';
+    const d = await mcpApi('test', { url: url || undefined, token: token || undefined });
+    document.getElementById('mcpTestResult').innerHTML = d.error
+      ? '<div class="set-hint" style="color:#e11d48">❌ ' + d.error + '</div>'
+      : '<div class="set-hint">✅ ' + (d.tools || []).length + ' tools: ' + (d.tools || []).slice(0, 8).map(t => t.name).join(', ') + '</div>';
+  }
+  async function mcpTestName(name) {
+    const d = await mcpApi('test', { name });
+    document.getElementById('mcpTestResult').innerHTML = d.error
+      ? '<div class="set-hint" style="color:#e11d48">❌ ' + d.error + '</div>'
+      : '<div class="set-hint">✅ ' + name + ': ' + (d.tools || []).length + ' tools — ' + (d.tools || []).slice(0, 8).map(t => t.name).join(', ') + '</div>';
+  }
+  async function mcpDel(name) {
+    if (!confirm(name + ' hatao?')) return;
+    await mcpApi('delete', { name }); loadMcp();
+  }
   function openSettings() {
     document.getElementById('settingsModal').classList.add('open');
     setProvider(settings.provider);

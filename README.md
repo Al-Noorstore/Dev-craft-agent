@@ -11,6 +11,37 @@ Deploy ke baad apna Vercel URL kholo (phone ya laptop — dono pe perfect):
 - 📱 **Add to Home Screen**: mobile pe "Install app" karo — app jaisa lagta hai!
 **Har user ka apna alag chat** — WhatsApp/Telegram pe bhi har client apne private chat mein baat karta hai, jaise real apps mein hota hai.
 
+## 🔌 MCP SUPPORT (v8 NEW!) — cloud + local dono
+
+Ab agent **MCP (Model Context Protocol)** servers use kar sakta hai — bilkul pro AI agents ki tarah:
+
+**Web (cloud):** Sidebar mein **"🔌 Connect MCP"** button:
+- MCP server add karo (naam + URL + optional auth token) → **Test** → tools dikhte hain → **Connect MCP to Agent**
+- Server config aap ke (Google login) account mein save — token encrypted
+- Phir chat mein: *"mere MCP servers list karo"*, *"supabase MCP se dekho..."* — agent khud `mcp_list_servers` / `mcp_test_server` / `mcp_call_tool` use karta hai
+- Example server: `https://mcp.supabase.com/mcp?project_ref=YOUR_REF` (Supabase ka official MCP — pehle OAuth karna hota hai browser se; token wahan se lo)
+
+**Desktop (local PC):** Header mein **🔌 button** — same panel. Config `~/.dev-craft/mcp.json` mein save (aap ke PC pe, aap ke paas).
+
+**Without MCP bhi sab chalta hai** — MCP sirf extra power hai. Koi MCP nahi? Koi baat nahi, saare 30+ endpoints aur tools waise hi hain.
+
+### API
+```bash
+# MCP server save
+curl -X POST https://YOUR-APP.vercel.app/api/mcp -H "Content-Type: application/json" \
+  -d '{"action":"save","name":"mysupabase","url":"https://mcp.supabase.com/mcp?project_ref=xxx","token":"..."}'
+# test (tools list)
+curl -X POST https://YOUR-APP.vercel.app/api/mcp -d '{"action":"test","name":"mysupabase"}'
+# call tool
+curl -X POST https://YOUR-APP.vercel.app/api/mcp -d '{"action":"call","name":"mysupabase","tool":"list_tables","args":{}}'
+```
+
+## 🗄️ NAYA SUPABASE PROJECT SETUP (1 minute!)
+
+Repo mein **`supabase-setup.sql`** file hai — Supabase Dashboard > SQL Editor mein paste karke RUN karo. Saari tables ban jayengi: leads, automations, bridge_devices, bridge_jobs, credentials (per-user vault), mcp_servers.
+
+Vercel env vars (dashboard se ya API se): `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (MCP/vault admin access), `CREDENTIALS_SECRET` (lamba random string).
+
 ## 🔑 GOOGLE LOGIN (Supabase Auth) — v8 NEW!
 
 Ab users **Google se sign in** kar sakte hain — aur unka credential vault **REAL verified Google account** se judta hai (ab user_id spoof karna impossible):

@@ -135,6 +135,8 @@
   /* ============ SETTINGS MODAL ============ */
   #settingsModal { position: fixed; inset: 0; background: rgba(17,24,39,.45); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
   #settingsModal.open { display: flex; }
+  #mcpModal { position: fixed; inset: 0; background: rgba(17,24,39,.45); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
+  #mcpModal.open { display: flex; }
   .set-box { background: var(--card); border-radius: 16px; padding: 20px; width: 100%; max-width: 420px; max-height: 86vh; overflow-y: auto; }
   .set-box h3 { font-size: 16px; margin-bottom: 14px; }
   .set-label { font-size: 12px; font-weight: 700; color: var(--text-muted); margin: 12px 0 6px; text-transform: uppercase; letter-spacing: .4px; }
@@ -172,13 +174,36 @@
     </div>
     <div class="menu-item" onclick="clearCurrent()"><span class="ic">🗑</span> Clear this chat</div>
     <div class="menu-item" onclick="showConnect()"><span class="ic">💻</span> Connect PC <span id="pcDot" style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:#d1d5db"></span></div>
+    <div class="menu-item" onclick="showMcp()"><span class="ic">🔌</span> Connect MCP</div>
     <div class="menu-item" onclick="showDownload()"><span class="ic">⬇️</span> Download App</div>
     <div class="menu-item" id="authItem" onclick="authClick()" style="display:none"><span class="ic">🔑</span> Sign in with Google</div>
     <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
     <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
   </aside>
-  <div id="backdrop" onclick="toggleSidebar(false)"></div>
+  
+  <!-- MCP MODAL -->
+  <div id="mcpModal" onclick="if(event.target===this)closeMcp()">
+    <div class="set-box">
+      <h3>🔌 Connect MCP</h3>
+      <div class="set-hint" style="margin-bottom:10px">MCP server jodo — agent uske tools khud use karega (Supabase, database, docs, koi bhi MCP service). <b>Google sign-in recommended</b>: server config tumhare account mein save hota hai.</div>
+      <div id="mcpSavedList"><div class="set-hint">Loading...</div></div>
+      <div class="set-label" style="margin-top:14px">Naya MCP server add karo</div>
+      <input type="text" id="mcpName" class="set-input" placeholder="Naam, e.g. supabase">
+      <input type="text" id="mcpUrl" class="set-input" placeholder="MCP Server URL, e.g. https://mcp.supabase.com/mcp?project_ref=..." style="margin-top:8px">
+      <input type="password" id="mcpToken" class="set-input" placeholder="Auth token (optional)" style="margin-top:8px">
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="ghost-btn" style="flex:0 0 auto;padding:11px 14px;font-size:13px" onclick="mcpTest(false)">🔍 Test</button>
+        <button class="primary-btn" style="flex:1" onclick="mcpSave()">Connect MCP to Agent</button>
+      </div>
+      <div id="mcpTestResult" style="margin-top:10px"></div>
+      <div style="display:flex;gap:8px;margin-top:16px">
+        <button class="ghost-btn" onclick="closeMcp()">Close</button>
+      </div>
+    </div>
+  </div>
+
+<div id="backdrop" onclick="toggleSidebar(false)"></div>
 
   <!-- MAIN -->
   <div id="main">
@@ -737,6 +762,63 @@
   }
 
   // ====== SETTINGS ======
+  // ================= MCP CONNECT =================
+  function mcpPayload(action, extra) { return { action, user_id: uid, access_token: accessToken || undefined, ...extra }; }
+  function showMcp() { document.getElementById('mcpModal').classList.add('open'); loadMcpList(); }
+  function closeMcp() { document.getElementById('mcpModal').classList.remove('open'); }
+  async function loadMcpList() {
+    const box = document.getElementById('mcpSavedList');
+    try {
+      const r = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mcpPayload('list')) });
+      const d = await r.json();
+      if (d.error) { box.innerHTML = '<div class="set-hint" style="color:#e11d48">' + d.error + '</div>'; return; }
+      if (!d.servers || !d.servers.length) { box.innerHTML = '<div class="set-hint">Abhi koi MCP server connect nahi — neeche se add karo 👇</div>'; return; }
+      box.innerHTML = d.servers.map(s =>
+        '<div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--pill-bg);border-radius:10px;margin-top:6px">' +
+        '<span style="font-size:18px">🔌</span>' +
+        '<div style="flex:1;overflow:hidden"><div style="font-weight:600;font-size:13px">' + s.name + '</div><div style="font-size:11px;opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + s.url + '</div></div>' +
+        '<button class="ghost-btn" style="flex:0 0 auto;padding:6px 10px;font-size:11px" onclick="mcpTestServer(\'' + s.name + '\')">Test</button>' +
+        '<button class="ghost-btn" style="flex:0 0 auto;padding:6px 10px;font-size:11px;color:#e11d48" onclick="mcpDelete(\'' + s.name + '\')">✕</button></div>').join('');
+    } catch (e) { box.innerHTML = '<div class="set-hint">Load fail — deploy/keys check karo</div>'; }
+  }
+  async function mcpSave() {
+    const name = document.getElementById('mcpName').value.trim();
+    const url = document.getElementById('mcpUrl').value.trim();
+    const token = document.getElementById('mcpToken').value.trim();
+    if (!name || !url) return alert('Naam aur URL dono daalo');
+    const r = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mcpPayload('save', { name, url, token: token || undefined })) });
+    const d = await r.json();
+    if (d.error) return alert(d.error);
+    document.getElementById('mcpName').value = ''; document.getElementById('mcpUrl').value = ''; document.getElementById('mcpToken').value = '';
+    loadMcpList(); mcpRenderResult('✅ ' + name + ' connect ho gaya! Ab chat mein poocho: "mere MCP servers list karo"');
+  }
+  async function mcpTest(direct) {
+    const box = document.getElementById('mcpTestResult');
+    box.innerHTML = '<div class="set-hint">Connecting...</div>';
+    const url = document.getElementById('mcpUrl').value.trim();
+    const token = document.getElementById('mcpToken').value.trim();
+    try {
+      const r = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mcpPayload('test', { url: url || undefined, token: token || undefined })) });
+      const d = await r.json();
+      if (d.error) { box.innerHTML = '<div class="set-hint" style="color:#e11d48">❌ ' + d.error + '</div>'; return; }
+      mcpRenderResult('✅ ' + (d.tools || []).length + ' tools mile: ' + (d.tools || []).slice(0, 8).map(t => t.name).join(', '));
+    } catch (e) { box.innerHTML = '<div class="set-hint" style="color:#e11d28">❌ ' + e.message + '</div>'; }
+  }
+  async function mcpTestServer(name) {
+    const r = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mcpPayload('test', { name })) });
+    const d = await r.json();
+    if (d.error) return alert(d.error);
+    mcpRenderResult('✅ ' + name + ': ' + (d.tools || []).length + ' tools — ' + (d.tools || []).slice(0, 8).map(t => t.name).join(', '));
+  }
+  async function mcpDelete(name) {
+    if (!confirm(name + ' ko hatao?')) return;
+    await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mcpPayload('delete', { name })) });
+    loadMcpList();
+  }
+  function mcpRenderResult(html) {
+    document.getElementById('mcpTestResult').innerHTML = '<div class="set-hint" style="background:var(--pill-bg);padding:10px;border-radius:10px;word-break:break-word">' + html + '</div>';
+  }
+
   // ================= GOOGLE AUTH (Supabase) =================
   let sbClient = null, accessToken = null, authUser = null;
   async function initAuth() {

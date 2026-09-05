@@ -85,6 +85,46 @@ function vaultExpand(cmd) {
   return String(cmd || '').replace(/\{\{\s*([A-Z0-9_]+)\s*\}\}/g, (m, n) => vaultGet(n) || m);
 }
 
+// ---------- MCP CLIENT + LOCAL STORE ----------
+const MCP_FILE = path.join(os.homedir(), '.dev-craft', 'mcp.json');
+function mcpLoad() { try { return JSON.parse(fs.readFileSync(MCP_FILE, 'utf8')); } catch (e) { return {}; } }
+function mcpSaveLocal(d) { fs.mkdirSync(path.dirname(MCP_FILE), { recursive: true }); fs.writeFileSync(MCP_FILE, JSON.stringify(d, null, 2), 'utf8'); try { fs.chmodSync(MCP_FILE, 0o600); } catch (e) {} }
+const MCP_PROTO = '2025-03-26';
+async function mcpRpc(url, token, body, sessionId) {
+  const headers = { 'Content-Type': 'application/json', 'Accept': 'application/json, text/event-stream' };
+  if (token) headers['Authorization'] = 'Bearer ' + token;
+  if (sessionId) headers['mcp-session-id'] = sessionId;
+  const r = await fetch(url, { method: 'POST', headers, body: JSON.stringify(body) });
+  const ct = r.headers.get('content-type') || '';
+  const text = await r.text();
+  let data = null;
+  if (ct.includes('text/event-stream')) {
+    for (const line of text.split('\n')) { if (line.startsWith('data:')) { try { data = JSON.parse(line.slice(5).trim()); } catch (e) {} } }
+  } else { try { data = text ? JSON.parse(text) : null; } catch (e) {} }
+  return { ok: r.ok, status: r.status, data, sid: r.headers.get('mcp-session-id'), raw: text.slice(0, 300) };
+}
+async function mcpHandshake(url, token) {
+  const init = await mcpRpc(url, token, { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: MCP_PROTO, capabilities: {}, clientInfo: { name: 'dev-craft-desktop', version: '1.0.0' } } });
+  if (!init.ok || !init.data || init.data.error) throw new Error('MCP connect fail: ' + ((init.data && init.data.error && init.data.error.message) || 'HTTP ' + init.status + ' ' + (init.raw || '')));
+  await mcpRpc(url, token, { jsonrpc: '2.0', method: 'notifications/initialized' }, init.sid).catch(() => {});
+  return init;
+}
+async function mcpListTools(url, token) {
+  const init = await mcpHandshake(url, token);
+  const r = await mcpRpc(url, token, { jsonrpc: '2.0', id: 2, method: 'tools/list' }, init.sid);
+  if (!r.ok || !r.data) throw new Error('tools/list fail (HTTP ' + r.status + ')');
+  const tools = (r.data.result && r.data.result.tools) || [];
+  return tools.map(t => ({ name: t.name, description: (t.description || '').slice(0, 200), params: t.inputSchema && t.inputSchema.properties ? Object.keys(t.inputSchema.properties) : [] }));
+}
+async function mcpCallToolFn(url, token, toolName, args) {
+  const init = await mcpHandshake(url, token);
+  const r = await mcpRpc(url, token, { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: toolName, arguments: args || {} } }, init.sid);
+  if (!r.ok || !r.data) throw new Error('tools/call fail (HTTP ' + r.status + ')');
+  if (r.data.error) throw new Error(r.data.error.message || 'tool error');
+  const content = (r.data.result && r.data.result.content) || [];
+  return { ok: true, result: content.filter(c => c.type === 'text').map(c => c.text).join('\n') || JSON.stringify(r.data.result).slice(0, 4000) };
+}
+
 // ---------- TOOLS (OpenClaw powers) ----------
 const TOOLS = [
   { type: 'function', function: { name: 'run_command', description: 'Laptop ke terminal mein koi bhi command chalao (npm, git, dir/ls, ping, python - anything). Output wapas milta hai.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'terminal command' }, cwd: { type: 'string', description: 'working directory (optional)' } }, required: ['command'] } } },
@@ -100,6 +140,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'credential_save', description: 'User ka API token/key/password local vault mein save karo (~/.dev-craft/credentials.json). User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'UPPERCASE naam, e.g. GITHUB_TOKEN, OPENAI_API_KEY' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string' } }, required: ['name', 'value'] } } },
   { type: 'function', function: { name: 'credential_list', description: 'Saare saved tokens ki masked list (values nahi dikhti)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'credential_delete', description: 'Saved token delete karo. Pehle user se confirm karo.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'mcp_list_servers', description: 'User ke saved MCP servers list karo (naam + URL)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'mcp_test_server', description: 'MCP server se connect karke tools ki list lao (server naam do, ya url)', parameters: { type: 'object', properties: { server: { type: 'string' }, url: { type: 'string' } }, required: [] } } },
+  { type: 'function', function: { name: 'mcp_call_tool', description: 'Saved MCP server ka koi tool chalao (Supabase, database, docs waghera ka kaam)', parameters: { type: 'object', properties: { server: { type: 'string' }, tool: { type: 'string' }, args: { type: 'object' } }, required: ['server', 'tool'] } } },
   { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } }
 ];
@@ -115,7 +158,8 @@ RULES:
 5. Har tool ke result ke baad chhota summary do. Final reply concise rakho.
 6. YouTube search: youtube tool {action:"search", query}. App kholna: open_app. Band karna: close_app (process name).
 7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).\n9. CREDENTIALS SKILL (Solene-style): user jo bhi token/key de (GitHub, OpenAI, Stripe...) turant credential_save se save karo. "mere tokens dikhao" => credential_list, "hatao" => credential_delete (confirm pehle). Saved token kisi command mein chahiye to {{NAME}} placeholder use karo, e.g. git push ke liye: run_command "git push https://x-access-token:{{GITHUB_TOKEN}}@github.com/user/repo.git" - placeholder khud replace hota hai. Token kabhi plain reply mein mat likhna - sirf masked (pehle 4 + aakhri 4 chars).
-\n10. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
+\n10. MCP SKILL: user ke saved MCP servers mcp_list_servers se dekho, mcp_test_server se tools jano, aur mcp_call_tool se kaam karo (Supabase/database/docs — jo bhi server offer karta hai). Server add karna ho to bolo: "MCP button (🔌) se add karo - naam, URL, optional token".
+\n11. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
 
 function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
 
@@ -142,6 +186,21 @@ async function runTool(name, args, steps) {
     else if (name === 'credential_save') { result = vaultSet(args.name, args.value, args.description); title = '🔐 Token save: ' + String(args.name || '').toUpperCase(); }
     else if (name === 'credential_list') { result = vaultList(); title = '🗂 Tokens list'; }
     else if (name === 'credential_delete') { result = vaultDel(args.name); title = '🗑 Token delete: ' + String(args.name || '').toUpperCase(); }
+    else if (name === 'mcp_list_servers') { const d = mcpLoad(); result = { servers: Object.keys(d).map(k => ({ name: k, url: d[k].url })) }; title = '🔌 MCP servers list'; }
+    else if (name === 'mcp_test_server') {
+      const d = mcpLoad(); const n = String(args.server || '').toLowerCase().trim();
+      const cfg = d[n] || (args.url ? { url: args.url, token: null } : null);
+      if (!cfg) { result = { error: 'server nahi mila — pehle MCP panel se add karo' }; }
+      else { try { const tools = await mcpListTools(cfg.url, cfg.token); result = { ok: true, tools: tools.slice(0, 40) }; } catch (e) { result = { error: e.message.slice(0, 200) }; } }
+      title = '🔌 MCP test: ' + (args.server || 'direct');
+    }
+    else if (name === 'mcp_call_tool') {
+      const d = mcpLoad(); const n = String(args.server || '').toLowerCase().trim();
+      const cfg = d[n];
+      if (!cfg) { result = { error: 'MCP server nahi mila: ' + n }; }
+      else { try { result = await mcpCallToolFn(cfg.url, cfg.token, args.tool, args.args || {}); } catch (e) { result = { error: e.message.slice(0, 200) }; } }
+      title = '🔌 MCP tool: ' + (args.tool || '');
+    }
     else if (name === 'system_info') { result = { os: os.type() + ' ' + os.release(), hostname: os.hostname(), user: os.userInfo().username, cpu: os.cpus()[0] && os.cpus()[0].model, ram_gb: Math.round(os.totalmem() / 1024 / 1024 / 1024), freemem_gb: Math.round(os.freemem() / 1024 / 1024 / 1024), uptime_h: Math.round(os.uptime() / 3600) }; title = '💻 System info'; }
     else if (name === 'android_project') {
       const home = os.homedir();
@@ -433,6 +492,35 @@ http.createServer((req, res) => {
         catch (e) { return res.end(JSON.stringify({ models: [] })); }
       }
       if (req.url === '/api/ping') return res.end(JSON.stringify({ ok: true, app: 'Dev Craft Desktop v1', os: os.type() }));
+      if (req.url === '/api/mcp') {
+        res.setHeader('Content-Type', 'application/json');
+        const b = body || {};
+        const d = mcpLoad();
+        if (b.action === 'save') {
+          if (!b.name || !b.url) return res.end(JSON.stringify({ error: 'name aur url chahiye' }));
+          d[String(b.name).toLowerCase().trim()] = { url: b.url, token: b.token || null, updated_at: new Date().toISOString() };
+          mcpSaveLocal(d);
+          return res.end(JSON.stringify({ ok: true, saved: b.name }));
+        }
+        if (b.action === 'delete') { delete d[String(b.name).toLowerCase().trim()]; mcpSaveLocal(d); return res.end(JSON.stringify({ ok: true })); }
+        if (b.action === 'test') {
+          try {
+            const cfg = d[String(b.name || '').toLowerCase().trim()] || (b.url ? { url: b.url, token: b.token || null } : null);
+            if (!cfg) return res.end(JSON.stringify({ error: 'server nahi mila' }));
+            const tools = await mcpListTools(cfg.url, cfg.token);
+            return res.end(JSON.stringify({ ok: true, tools: tools.slice(0, 40) }));
+          } catch (e) { return res.end(JSON.stringify({ error: e.message.slice(0, 200) })); }
+        }
+        if (b.action === 'call') {
+          try {
+            const cfg = d[String(b.name || '').toLowerCase().trim()];
+            if (!cfg) return res.end(JSON.stringify({ error: 'server nahi mila' }));
+            const r = await mcpCallToolFn(cfg.url, cfg.token, b.tool, b.args || {});
+            return res.end(JSON.stringify(r));
+          } catch (e) { return res.end(JSON.stringify({ error: e.message.slice(0, 200) })); }
+        }
+        return res.end(JSON.stringify({ servers: Object.keys(d).map(k => ({ name: k, url: d[k].url })) }));
+      }
       if (req.url === '/api/credentials') {
         res.setHeader('Content-Type', 'application/json');
         const b = body || {};
