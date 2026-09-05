@@ -110,6 +110,27 @@
   #mic.listening { background: #fee2e2; color: #ef4444; animation: pulse 1s infinite; }
   @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.55} }
   #inputWrap { flex: 1; display: flex; align-items: center; background: var(--pill-bg); border-radius: 22px; padding: 2px 6px 2px 16px; }
+
+  /* pages pe chat input hide + back button */
+  .input-area.hidden { display: none; }
+  .back-chat-btn { display: inline-flex; align-items: center; gap: 6px; background: transparent; border: 1px solid var(--border); color: var(--text-muted); border-radius: 10px; padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer; margin-bottom: 12px; font-family: inherit; }
+  .back-chat-btn:hover { background: var(--pill-bg); color: var(--text); }
+  .install-card { display: flex; align-items: center; gap: 14px; margin-top: 14px; padding: 16px; border: 1px solid var(--border); border-radius: 14px; background: var(--card); }
+  /* laptop/desktop: 4 guides ek row mein */
+  @media (min-width: 769px) { .dl-os-grid { grid-template-columns: repeat(4, 1fr); } }
+  /* mobile friendly */
+  @media (max-width: 768px) {
+    .connect-page { padding: 14px 12px 80px; }
+    .connect-page h2 { font-size: 18px; }
+    .dl-os-card { display: flex; align-items: center; gap: 10px; text-align: left; padding: 12px; }
+    .dl-os-card .osic { margin: 0; font-size: 22px; }
+    .dl-os-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .install-card { flex-direction: column; text-align: center; padding: 14px 12px; }
+    .install-card img { margin: 0 auto; }
+    .install-card button { width: 100%; }
+    .dl-btn-big { padding: 16px; font-size: 16px; }
+    .gstep { font-size: 13px; }
+  }
   #input { flex: 1; background: transparent; border: none; color: var(--text); padding: 10px 4px; font-size: 14.5px; outline: none; resize: none; font-family: inherit; max-height: 120px; }
   #input::placeholder { color: var(--text-faint); }
   #send { width: 40px; height: 40px; border: none; border-radius: 50%; background: var(--primary); color: white; cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
@@ -477,7 +498,13 @@
   }
 
   // ====== CHAT ACTIONS ======
+  function toggleChatInput(show) {
+    const el = document.querySelector('.input-area');
+    if (el) el.classList.toggle('hidden', !show);
+  }
+  function backToChat() { goHome(); }
   function newChat() {
+    toggleChatInput(true);
     const conv = { id: 'c' + Date.now(), title: 'New Chat', messages: [], updated: Date.now() };
     conversations.push(conv);
     currentId = conv.id; connectView = false;
@@ -488,11 +515,13 @@
   }
 
   function loadConv(id) {
+    toggleChatInput(true);
     currentId = id; save(); renderSidebar(); renderChat();
     toggleSidebar(false);
   }
 
   function goHome() {
+    toggleChatInput(true);
     currentId = null; connectView = false;
     if (pcTimer) { clearInterval(pcTimer); pcTimer = null; }
     save(); renderSidebar(); renderChat();
@@ -506,7 +535,7 @@
     save(); renderSidebar(); renderChat();
   }
 
-  function clearCurrent() { if (current()) { current().messages = []; current().title = 'New Chat'; save(); renderSidebar(); renderChat(); } toggleSidebar(false); }
+  function clearCurrent() { toggleChatInput(true); if (current()) { current().messages = []; current().title = 'New Chat'; save(); renderSidebar(); renderChat(); } toggleSidebar(false); }
 
   async function sendMsg() {
     const text = input.value.trim();
@@ -627,12 +656,14 @@
   function showDownload() {
     connectView = false;
     toggleSidebar(false);
+    toggleChatInput(false);
     renderDownload('windows');
   }
 
   function renderDownload(os) {
     const g = DL_GUIDES[os];
     chat.innerHTML = '<div class="connect-page">' +
+      '<button class="back-chat-btn" onclick="backToChat()">← Back to Chat</button>' +
       '<h2>⬇️ Download App</h2>' +
       '<p class="sub">Dev Craft Agent Desktop — OpenClaw powers ke saath: terminal, files/folders edit+delete, apps open/close, YouTube control. Apna OS select karo:</p>' +
       '<div class="dl-os-grid">' +
@@ -642,7 +673,7 @@
         g.steps.map((st, i) => '<div class="gstep"><span class="n">' + (i + 1) + '</span><span>' + st + '</span></div>').join('') +
       '</div>' +
       (os === 'mobile'
-        ? '<div style="margin-top:14px;padding:16px;border:1px solid var(--border);border-radius:14px;display:flex;align-items:center;gap:14px">' +
+        ? '<div class="install-card">' +
             '<img src="/icon-192.png" style="width:56px;height:56px;border-radius:14px" alt="DC Agent">' +
             '<div style="flex:1"><div style="font-weight:800;font-size:15px">DC Agent</div><div style="font-size:12px;color:var(--text-faint)">Install karo — icon home screen pe aa jayega, ek tap mein open</div></div>' +
             '<button class="primary-btn" style="flex:0 0 auto;padding:11px 18px" onclick="installNow(this)">📲 Install App</button>' +
@@ -696,6 +727,7 @@
   function showConnect() {
     connectView = true;
     toggleSidebar(false);
+    toggleChatInput(false);
     renderConnect();
   }
 
@@ -704,6 +736,7 @@
     const cmds = OS_CMDS[currentOS];
     const cmdHtml = cmds.map(c => '<div class="cmd-block" onclick="copyCmd(this)"><span>' + c.replace(/</g, '&lt;') + '</span><span class="cpy">Copy</span></div>').join('');
     chat.innerHTML = '<div class="connect-page">' +
+      '<button class="back-chat-btn" onclick="backToChat()">← Back to Chat</button>' +
       '<h2>💻 Connect your PC / Laptop</h2>' +
       '<p class="sub">Agent tumhare PC pe kaam karega — terminal commands, local Ollama models, sab kuch. Apna OS select karo:</p>' +
       '<div class="os-row">' +
