@@ -39,7 +39,11 @@
   #input:focus { border-color:var(--primary); }
   #send { background:var(--primary); color:#fff; border:none; border-radius:12px; width:44px; cursor:pointer; font-size:16px; }
   #send:disabled { opacity:.5; }
-  .typing { color:var(--text-faint); font-style:italic; }
+  .typing { color:var(--text-faint); font-style:normal; display:flex; align-items:center; gap:7px; }
+  .think-dots { display:inline-flex; gap:4px; }
+  .think-dots span { width:6px; height:6px; border-radius:50%; background:var(--text-faint); animation:tdot 1.2s ease-in-out infinite; }
+  .think-dots span:nth-child(2){ animation-delay:.15s } .think-dots span:nth-child(3){ animation-delay:.3s }
+  @keyframes tdot { 0%,60%,100%{ transform:translateY(0); opacity:.35 } 30%{ transform:translateY(-4px); opacity:1 } }
   #mcpModal { position: fixed; inset: 0; background: rgba(15,15,15,.55); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
   #mcpModal.open { display: flex; }
   #settingsModal { position:fixed; inset:0; background:rgba(17,24,39,.45); z-index:90; display:none; align-items:center; justify-content:center; padding:16px; }
@@ -274,7 +278,7 @@
     addMsg(text, 'user');
     input.value = ''; input.style.height = 'auto';
     busy = true; document.getElementById('send').disabled = true;
-    const t = document.createElement('div'); t.className = 'msg-row bot'; t.innerHTML = '<div class="avatar">⚡</div><div class="msg typing">...kaam kar raha hoon</div>';
+    const t = document.createElement('div'); t.className = 'msg-row bot'; t.innerHTML = '<div class="avatar">⚡</div><div class="msg typing">Thinking<span class="think-dots"><span></span><span></span><span></span></span></div>';
     chat.appendChild(t);
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
