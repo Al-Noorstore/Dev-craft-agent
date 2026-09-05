@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   const SB_URL = process.env.SUPABASE_URL;
-  const SB_KEY = process.env.SUPABASE_ANON_KEY;
+  const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY; // RLS-safe
   const setupHelp = {
     error: 'Supabase env vars missing',
     setup_help: 'supabase.com pe free project banao, 2 tables banao: bridge_devices (id uuid, code text, device_name text, os text, ollama_models jsonb, status text, last_seen timestamptz, created_at timestamptz) aur bridge_jobs (id uuid, device_id uuid, type text, payload jsonb, status text, result jsonb, created_at timestamptz, completed_at timestamptz). Phir SUPABASE_URL + SUPABASE_ANON_KEY env vars set karo.'

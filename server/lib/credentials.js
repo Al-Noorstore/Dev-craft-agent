@@ -59,7 +59,7 @@ function mask(value) {
 function uid(userId) { return String(userId || 'owner').trim() || 'owner'; }
 
 function sb() {
-  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_ANON_KEY;
+  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY; // RLS-safe: service role bypass karta hai
   if (!SB_URL || !SB_KEY) return null;
   return { url: SB_URL, headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' } };
 }

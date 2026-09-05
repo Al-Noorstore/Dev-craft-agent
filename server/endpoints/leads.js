@@ -17,7 +17,7 @@ module.exports = async (req, res) => {
 
   try {
     const SB_URL = process.env.SUPABASE_URL;
-    const SB_KEY = process.env.SUPABASE_ANON_KEY;
+    const SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY; // RLS-safe
     if (!SB_URL || !SB_KEY) {
       return res.status(500).json({
         error: 'Supabase env vars missing',
