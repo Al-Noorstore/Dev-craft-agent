@@ -13,7 +13,7 @@ const google = require('./google.js');
 
 // ---- AI BRAIN providers (OpenAI-compatible) — connect_ai_brain + handler dono use karte hain ----
 const BRAIN_PROVIDERS = {
-  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', label: 'Google Gemini' },
+  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-3.6-flash', label: 'Google Gemini' },
   openai:    { url: null, model: 'gpt-4o-mini', label: 'OpenAI' },
   openrouter:{ url: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', label: 'OpenRouter' },
   groq:      { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', label: 'Groq' },

@@ -127,7 +127,7 @@ async function mcpCallToolFn(url, token, toolName, args) {
 
 // ---------- TOOLS (OpenClaw powers) ----------
 const BRAIN_PROVIDERS = {
-  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', label: 'Google Gemini' },
+  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.6-flash', label: 'Google Gemini' },
   openai:    { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', label: 'OpenAI' },
   openrouter:{ url: 'https://openrouter.ai/v1/chat/completions', model: 'openrouter/auto', label: 'OpenRouter' },
   groq:      { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', label: 'Groq' },
