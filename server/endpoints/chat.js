@@ -44,6 +44,7 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 ## CREDENTIALS SKILL (Solene-style - token par kaam karna):
 - User jo bhi API token/key/credentials chat mein de (ya "token save karo" bole), TURANT save_credential se save karo. Name UPPERCASE standard: GITHUB_TOKEN, GITLAB_TOKEN, NOTION_TOKEN, TELEGRAM_BOT_TOKEN, STRIPE_SECRET_KEY, TWITTER_BEARER_TOKEN, GITHUB/GITLAB/STRIPE waghera.
 - "mere tokens dikhao" => list_credentials. "ye token hatao" => delete_credential (pehle confirm karo).
+- KOI BHI PLATFORM ka kaam: user ka token vault mein ho to api_request use karo — { url, method, token_name, body }. Ye automatically Bearer auth lagata hai. GitHub repos, GitLab, Notion pages, Slack messages, Stripe payments, Twitter posts — koi bhi REST API. 401 aaye to user ko sahi token save karne bolo.
 - Save hone par user ko bolo: "encrypted ho kar save ho gaya ✅ (main sirf masked dikha sakta hoon)". Token kabhi wapas plain text mein mat likhna - sirf pehle 4 aur aakhri 4 characters.
 - Jab bhi kisi tool mein token chahiye (GitHub repo banana, Notion entry, Stripe link, Telegram), PEHLE check karo - saved credential hota to khud use karo aur user ko bolna nahi padta. Vault empty ho to user se token maango.
 - PER-USER: har user ka vault ALAG hai (user_id ke hisaab se). Ek user ka token doosre user ko kabhi nahi dikhta/milta. list_credentials sirf usi user ke tokens dikhata hai jo chat kar raha hai.
@@ -86,6 +87,7 @@ const TOOLS = [
   { type: 'function', function: { name: 'save_credential', description: 'User ka API token/key/password encrypted vault mein save karo. User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'standard env-style naam, e.g. GITHUB_TOKEN' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string', description: 'chhoti note (optional)' } }, required: ['name', 'value'] } } },
   { type: 'function', function: { name: 'list_credentials', description: 'Saare saved tokens ki masked list dikhao (values nahi dikhti)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_credential', description: 'Saved token ko vault se hatao. Pehle user se confirm karo.', parameters: { type: 'object', properties: { name: { type: 'string' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'api_request', description: 'Kisi BHI platform ka REST API call karo - user ke saved vault token ke saath (ya bina token). Jab koi dedicated tool na ho (GitHub, GitLab, Notion, Slack, Twitter, Telegram, Stripe, DigitalOcean, Cloudflare, koi bhi platform) to ye use karo. token_name = vault mein saved naam (e.g. GITHUB_TOKEN), wo automatically Authorization: Bearer header mein lag jayega. Ek baar 401/403 aaye to user ko bolo ke sahi token save kare.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'poora API URL, e.g. https://api.github.com/user' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, token_name: { type: 'string', description: 'vault mein saved token ka naam (optional)' }, headers: { type: 'object', description: 'extra headers (optional)' }, body: { type: 'object', description: 'JSON body POST/PUT/PATCH ke liye (optional)' } }, required: ['url'] } } },
   { type: 'function', function: { name: 'mcp_list_servers', description: 'User ke saved MCP servers list karo (naam + URL)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'mcp_test_server', description: 'MCP server se connect karke uske tools ki list lao (server saved ho naam do, warna url)', parameters: { type: 'object', properties: { server: { type: 'string', description: 'saved server ka naam (optional)' }, url: { type: 'string', description: 'direct MCP URL (agar saved nahi)' } }, required: [] } } },
   { type: 'function', function: { name: 'mcp_call_tool', description: 'User ke MCP server ka koi tool chalao (Supabase/database/docs waghera ka kaam)', parameters: { type: 'object', properties: { server: { type: 'string', description: 'saved MCP server ka naam' }, tool: { type: 'string' }, args: { type: 'object', description: 'tool ke arguments (JSON)' } }, required: ['server', 'tool'] } } },
@@ -126,8 +128,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -183,7 +185,7 @@ async function waitBridgeJob(jobId, maxMs) {
 }
 
 // mcp endpoint ko in-process call karo (verified uid ke saath)
-async function mcpApi(action, body) {
+async function mcpApi(action, body, uid) {
   return new Promise((resolve) => {
     let done = false;
     const finish = (r) => { if (!done) { done = true; resolve(r); } };
@@ -197,7 +199,7 @@ async function mcpApi(action, body) {
 }
 
 // endpoint deploy-vercel expects { secret } — server-side inject
-async function runTool(name, args, steps) {
+async function runTool(name, args, steps, uid) {
   const step = { title: `${STEP_ICON[name] || '⚙️'} ${STEP_TITLE[name] || name}`, status: 'working', detail: '' };
   steps.push(step);
   let body = { ...args };
@@ -219,9 +221,26 @@ async function runTool(name, args, steps) {
   if (name === 'save_credential') { epName = null; const r = await vault.saveCredential(args.name, args.value, args.description, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : (r.saved + ' ' + (r.masked || '')); return JSON.stringify(r); }
   if (name === 'list_credentials') { epName = null; const r = await vault.listCredentials(uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.credentials || []).length + ' saved'); return JSON.stringify(r); }
   if (name === 'delete_credential') { epName = null; const r = await vault.deleteCredential(args.name, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'deleted'; return JSON.stringify(r); }
-  if (name === 'mcp_list_servers') { epName = null; const r = await mcpApi('list', {}); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.servers || []).length + ' servers'); return JSON.stringify(r); }
-  if (name === 'mcp_test_server') { epName = null; const r = await mcpApi('test', { name: args.server, url: args.url }); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.tools || []).length + ' tools mile'); return JSON.stringify(r); }
-  if (name === 'mcp_call_tool') { epName = null; const r = await mcpApi('call', { name: args.server, tool: args.tool, args: args.args || {} }); step.status = r.ok === false || r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'complete'; return JSON.stringify(r); }
+  if (name === 'api_request') {
+    epName = null;
+    const meth = (args.method || 'GET').toUpperCase();
+    let token = null;
+    if (args.token_name) token = await vault.getCredential(args.token_name, uid);
+    const H = { 'Content-Type': 'application/json', ...(args.headers || {}) };
+    if (token) H['Authorization'] = 'Bearer ' + token;
+    try {
+      const opts = { method: meth, headers: H };
+      if (meth !== 'GET' && meth !== 'HEAD' && args.body) opts.body = JSON.stringify(args.body);
+      const r = await fetch(args.url, opts);
+      const txt = await r.text();
+      step.status = r.ok ? 'done' : 'error';
+      step.detail = 'HTTP ' + r.status;
+      return JSON.stringify({ ok: r.ok, status: r.status, data: txt.slice(0, 3500) });
+    } catch (e) { step.status = 'error'; step.detail = String(e.message).slice(0, 120); return JSON.stringify({ error: e.message }); }
+  }
+  if (name === 'mcp_list_servers') { epName = null; const r = await mcpApi('list', {}, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.servers || []).length + ' servers'); return JSON.stringify(r); }
+  if (name === 'mcp_test_server') { epName = null; const r = await mcpApi('test', { name: args.server, url: args.url }, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.tools || []).length + ' tools mile'); return JSON.stringify(r); }
+  if (name === 'mcp_call_tool') { epName = null; const r = await mcpApi('call', { name: args.server, tool: args.tool, args: args.args || {} }, uid); step.status = r.ok === false || r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'complete'; return JSON.stringify(r); }
   if (name === 'list_automations') { epName = 'automations'; body = { action: 'list' }; }
   if (name === 'delete_automation') { epName = 'automations'; body = { action: 'delete', id: args.id }; }
   if (epName && uid && uid !== 'owner') body.user_id = uid; // github/notion/stripe waghera bhi user-scoped vault padhein
@@ -304,7 +323,7 @@ const handler = async (req, res) => {
         messages.push(msg);
         for (const tc of msg.tool_calls) {
           let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
-          const result = await runTool(tc.function.name, args, steps);
+          const result = await runTool(tc.function.name, args, steps, uid);
           if (tc.function.name === 'build_and_deploy') { try { const d = JSON.parse(result); if (d.live_url) links.push(d.live_url); } catch {} }
           messages.push({ role: 'tool', tool_call_id: tc.id, content: trunc(result) });
         }
