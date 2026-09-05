@@ -669,9 +669,10 @@
       '<div class="dl-os-grid">' +
         Object.keys(DL_GUIDES).map(k => '<div class="dl-os-card' + (k === os ? ' active' : '') + '" onclick="renderDownload(\'' + k + '\')"><span class="osic">' + DL_GUIDES[k].icon + '</span><b>' + DL_GUIDES[k].name + '</b><span class="ver">' + DL_GUIDES[k].ver + '</span></div>').join('') +
       '</div>' +
+      (os === 'mobile' ? '' :
       '<div class="guide-box"><h3>' + g.icon + ' ' + g.name + ' — Install Steps</h3>' +
         g.steps.map((st, i) => '<div class="gstep"><span class="n">' + (i + 1) + '</span><span>' + st + '</span></div>').join('') +
-      '</div>' +
+      '</div>') +
       (os === 'mobile'
         ? '<div class="install-card">' +
             '<img src="/icon-192.png" style="width:56px;height:56px;border-radius:14px" alt="DC Agent">' +
