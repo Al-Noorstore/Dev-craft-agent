@@ -360,9 +360,16 @@ const handler = async (req, res) => {
     baseURL = String(baseURL || '').replace(/\/+$/, '');
     if (!baseURL) return res.status(400).json({ error: 'Custom API ke liye base URL chahiye' });
   }
+  // ---- GEMINI FALLBACK: koi personal key nahi magar GEMINI_API_KEY env set hai to Gemini brain use karo ----
+  if (!effKey && !api_key && !process.env.OPENAI_API_KEY && process.env.GEMINI_API_KEY) {
+    effProvider = 'gemini';
+    effKey = process.env.GEMINI_API_KEY;
+    effModel = BRAIN_PROVIDERS.gemini.model;
+    baseURL = BRAIN_PROVIDERS.gemini.url;
+  }
   const userKey = effKey || process.env.OPENAI_API_KEY;
   if (!userKey) {
-    return res.status(500).json({ error: 'API key missing - Settings (menu > Settings) mein apni personal API key paste karo (OpenAI / OpenRouter / Custom), ya Vercel pe OPENAI_API_KEY set karo.' });
+    return res.status(500).json({ error: 'API key missing - Settings (menu > Settings) mein apni personal API key paste karo (OpenAI / OpenRouter / Custom), ya Vercel pe GEMINI_API_KEY / OPENAI_API_KEY set karo. Ya chat mein koi AI ki key de kar bolo "connect as AI brain".' });
   }
   const openai = new OpenAI({ apiKey: userKey, ...(baseURL ? { baseURL } : {}) });
 
