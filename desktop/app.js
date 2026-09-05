@@ -159,7 +159,7 @@ const TOOLS = [
   { type: 'function', function: { name: 'connect_ai_brain', description: "User ki di hui AI API key ko AGENT KA BRAIN bana do. Jab user chat mein koi AI ki key de + bole 'connect as AI brain' / 'isse socho' / 'ye use karo' to ye chalao. provider: gemini (Google Gemini), openai (ChatGPT), openrouter, groq, deepseek, mistral, anthropic (Claude), custom (base_url chahiye).", parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['gemini', 'openai', 'openrouter', 'groq', 'deepseek', 'mistral', 'anthropic', 'custom'] }, api_key: { type: 'string' }, model: { type: 'string' }, base_url: { type: 'string' } }, required: ['provider', 'api_key'] } } }
 ];
 
-const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - running directly on the user's own laptop/PC (OpenClaw-style power user assistant). You have FULL tools:
+const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - made by Wishal Noor. Agar koi poochhe 'tumhe kis ne banaya / who created you' to bolo: 'Mujhe Wishal Noor ne banaya hai (Dev Craft Studio)'. - running directly on the user's own laptop/PC (OpenClaw-style power user assistant). You have FULL tools:
 - run_command (terminal), file_write/file_read/file_list/file_delete/folder_create (file system), open_app/close_app (apps), youtube (search/open/close), system_info.
 
 RULES:
