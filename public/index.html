@@ -1015,8 +1015,8 @@
   // Google connect callback se wapas aaye to message dikhao
   try {
     const qp = new URLSearchParams(location.search);
-    if (qp.get('google') === 'connected') { setTimeout(() => addMsg('assistant', '✅ Google account connect ho gaya! Ab mujhe bolo — "mere emails padho", "calendar aaj kya hai", "Drive mein kya files hain" — sab khud kar lunga. 🌐'), 600); history.replaceState(null, '', '/'); }
-    if (qp.get('google') === 'error') { setTimeout(() => addMsg('assistant', '⚠️ Google connect fail hua — dobara try karo (Settings > Google Account > Connect).'), 600); history.replaceState(null, '', '/'); }
+    if (qp.get('google') === 'connected') { setTimeout(() => addMsg('✅ Google account connect ho gaya! Ab mujhe bolo — "mere emails padho", "calendar aaj kya hai", "Drive mein kya files hain" — sab khud kar lunga. 🌐', 'assistant'), 600); history.replaceState(null, '', '/'); }
+    if (qp.get('google') === 'error') { setTimeout(() => addMsg('⚠️ Google connect fail hua — dobara try karo (Settings > Google Account > Connect).', 'assistant'), 600); history.replaceState(null, '', '/'); }
   } catch (e) {}
 
   function openSettings() {
