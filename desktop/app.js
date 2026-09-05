@@ -126,6 +126,17 @@ async function mcpCallToolFn(url, token, toolName, args) {
 }
 
 // ---------- TOOLS (OpenClaw powers) ----------
+const BRAIN_PROVIDERS = {
+  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-2.0-flash', label: 'Google Gemini' },
+  openai:    { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', label: 'OpenAI' },
+  openrouter:{ url: 'https://openrouter.ai/v1/chat/completions', model: 'openrouter/auto', label: 'OpenRouter' },
+  groq:      { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', label: 'Groq' },
+  deepseek:  { url: 'https://api.deepseek.com/v1/chat/completions', model: 'deepseek-chat', label: 'DeepSeek' },
+  mistral:   { url: 'https://api.mistral.ai/v1/chat/completions', model: 'mistral-large-latest', label: 'Mistral' },
+  anthropic: { url: 'https://api.anthropic.com/v1/chat/completions', model: 'claude-sonnet-4-20250514', label: 'Anthropic (Claude)' },
+  custom:    { url: null, model: null, label: 'Custom API' },
+};
+
 const TOOLS = [
   { type: 'function', function: { name: 'run_command', description: 'Laptop ke terminal mein koi bhi command chalao (npm, git, dir/ls, ping, python - anything). Output wapas milta hai.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'terminal command' }, cwd: { type: 'string', description: 'working directory (optional)' } }, required: ['command'] } } },
   { type: 'function', function: { name: 'file_write', description: 'File banao ya edit karo - poora content likho. Kisi bhi folder mein.', parameters: { type: 'object', properties: { path: { type: 'string' }, content: { type: 'string' } }, required: ['path', 'content'] } } },
@@ -144,7 +155,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'mcp_test_server', description: 'MCP server se connect karke tools ki list lao (server naam do, ya url)', parameters: { type: 'object', properties: { server: { type: 'string' }, url: { type: 'string' } }, required: [] } } },
   { type: 'function', function: { name: 'mcp_call_tool', description: 'Saved MCP server ka koi tool chalao (Supabase, database, docs waghera ka kaam)', parameters: { type: 'object', properties: { server: { type: 'string' }, tool: { type: 'string' }, args: { type: 'object' } }, required: ['server', 'tool'] } } },
   { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } },
-  { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } }
+  { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } },
+  { type: 'function', function: { name: 'connect_ai_brain', description: "User ki di hui AI API key ko AGENT KA BRAIN bana do. Jab user chat mein koi AI ki key de + bole 'connect as AI brain' / 'isse socho' / 'ye use karo' to ye chalao. provider: gemini (Google Gemini), openai (ChatGPT), openrouter, groq, deepseek, mistral, anthropic (Claude), custom (base_url chahiye).", parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['gemini', 'openai', 'openrouter', 'groq', 'deepseek', 'mistral', 'anthropic', 'custom'] }, api_key: { type: 'string' }, model: { type: 'string' }, base_url: { type: 'string' } }, required: ['provider', 'api_key'] } } }
 ];
 
 const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - running directly on the user's own laptop/PC (OpenClaw-style power user assistant). You have FULL tools:
@@ -159,7 +171,8 @@ RULES:
 6. YouTube search: youtube tool {action:"search", query}. App kholna: open_app. Band karna: close_app (process name).
 7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).\n9. CREDENTIALS SKILL (Solene-style): user jo bhi token/key de (GitHub, OpenAI, Stripe...) turant credential_save se save karo. "mere tokens dikhao" => credential_list, "hatao" => credential_delete (confirm pehle). Saved token kisi command mein chahiye to {{NAME}} placeholder use karo, e.g. git push ke liye: run_command "git push https://x-access-token:{{GITHUB_TOKEN}}@github.com/user/repo.git" - placeholder khud replace hota hai. Token kabhi plain reply mein mat likhna - sirf masked (pehle 4 + aakhri 4 chars).
 \n10. MCP SKILL: user ke saved MCP servers mcp_list_servers se dekho, mcp_test_server se tools jano, aur mcp_call_tool se kaam karo (Supabase/database/docs — jo bhi server offer karta hai). Server add karna ho to bolo: "MCP button (🔌) se add karo - naam, URL, optional token".
-\n11. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
+\n11. AI BRAIN: user chat mein AI ki API key de (e.g. "ye Gemini ki key hai") + bole "connect as AI brain" / "isse socho" → connect_ai_brain chalao (Gemini→gemini, ChatGPT/OpenAI→openai, Claude→anthropic, Groq→groq, DeepSeek→deepseek, Mistral→mistral, OpenRouter→openrouter). Confirm karo: "✅ <AI> ab mera brain hai". Key de lekin kya karna bata na bole to poochho: "AI brain banaun ya sirf save karun?" "brain disconnect" → delete_credential BRAIN_API_KEY.
+\n12. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
 
 function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
 
@@ -183,7 +196,23 @@ async function runTool(name, args, steps) {
       else if (args.action === 'open') { result = await openTarget(args.url || 'https://youtube.com'); title = '📺 YouTube khola'; }
       else { result = await killProcess(IS_WIN ? 'chrome' : 'firefox'); title = '📺 YouTube/browser band'; }
     }
-    else if (name === 'credential_save') { result = vaultSet(args.name, args.value, args.description); title = '🔐 Token save: ' + String(args.name || '').toUpperCase(); }
+    else if (name === 'connect_ai_brain') {
+    const prov = String(args.provider || '').toLowerCase().trim();
+    const key = String(args.api_key || '').trim();
+    const P = BRAIN_PROVIDERS[prov];
+    if (!prov || !key || !P) { steps.push({ title: '🧠 AI brain connect', status: 'error', detail: 'provider + api_key sahi chahiye' }); return JSON.stringify({ error: 'provider aur api_key dono chahiye (gemini/openai/openrouter/groq/deepseek/mistral/anthropic/custom)' }); }
+    let burl = P.url;
+    if (prov === 'custom') { burl = String(args.base_url || '').replace(/\/+$/, ''); if (!burl) { steps.push({ title: '🧠 AI brain connect', status: 'error', detail: 'custom ko base_url chahiye' }); return JSON.stringify({ error: 'Custom provider ke liye base_url chahiye' }); } }
+    vaultSet('BRAIN_PROVIDER', prov, 'AI brain provider (chat se connected)');
+    vaultSet('BRAIN_API_KEY', key, 'AI brain API key');
+    vaultSet('BRAIN_BASE_URL', burl ? burl.replace('/chat/completions', '') : '', 'AI brain base URL');
+    vaultDel('BRAIN_MODEL');
+    if (args.model) vaultSet('BRAIN_MODEL', String(args.model).trim(), 'AI brain model');
+    const masked = key.slice(0, 4) + '...' + key.slice(-4);
+    steps.push({ title: '🧠 ' + P.label + ' connect ho raha hai', status: 'done', detail: masked });
+    return JSON.stringify({ ok: true, connected: true, provider: prov, label: P.label, model: args.model || P.model, masked, note: 'Ab se agent isi AI se sochega (Settings override). Wapas settings wala chahiye to BRAIN_API_KEY delete karo.' });
+  }
+  if (name === 'credential_save') { result = vaultSet(args.name, args.value, args.description); title = '🔐 Token save: ' + String(args.name || '').toUpperCase(); }
     else if (name === 'credential_list') { result = vaultList(); title = '🗂 Tokens list'; }
     else if (name === 'credential_delete') { result = vaultDel(args.name); title = '🗑 Token delete: ' + String(args.name || '').toUpperCase(); }
     else if (name === 'mcp_list_servers') { const d = mcpLoad(); result = { servers: Object.keys(d).map(k => ({ name: k, url: d[k].url })) }; title = '🔌 MCP servers list'; }
@@ -370,19 +399,29 @@ async function chat(req, res, body) {
     } catch (e) { return res.end(JSON.stringify({ error: 'Ollama nahi chal raha (localhost:11434). ollama.com se install karo ya Settings mein OpenAI key use karo.' })); }
   }
 
+  // ---- VAULT BRAIN: chat se connected AI brain (Settings pe override) ----
+  let effKey = api_key, effUrl, effModel = model;
+  const vBrainKey = vaultGet('BRAIN_API_KEY');
+  if (vBrainKey) {
+    effKey = vBrainKey;
+    const vUrl = vaultGet('BRAIN_BASE_URL');
+    if (vUrl) effUrl = vUrl.replace(/\/+$/, '') + '/chat/completions';
+    effModel = vaultGet('BRAIN_MODEL') || (BRAIN_PROVIDERS[vaultGet('BRAIN_PROVIDER')] ? BRAIN_PROVIDERS[vaultGet('BRAIN_PROVIDER')].model : model);
+  }
+
   // ---- OpenAI / OpenRouter / Custom (OpenAI-compatible) ----
-  const BRAIN_URL = provider === 'openrouter' ? 'https://openrouter.ai/v1/chat/completions'
+  const BRAIN_URL = effUrl || (provider === 'openrouter' ? 'https://openrouter.ai/v1/chat/completions'
     : provider === 'custom' ? (base_url || '').replace(/\/+$/, '') + '/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions';
-  const brainModel = model || (provider === 'openrouter' ? 'openrouter/auto' : provider === 'custom' ? 'custom-model' : 'gpt-4o-mini');
-  if (!api_key) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) mein apni API key paste karo (OpenAI/OpenRouter/Custom), ya Ollama select karo (free).' }));
-  if (provider === 'custom' && !base_url) return res.end(JSON.stringify({ error: 'Custom API ke liye Base URL Settings mein daalo' }));
+    : 'https://api.openai.com/v1/chat/completions');
+  const brainModel = effModel || (provider === 'openrouter' ? 'openrouter/auto' : provider === 'custom' ? 'custom-model' : 'gpt-4o-mini');
+  if (!effKey) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) mein apni API key paste karo (OpenAI/OpenRouter/Custom), ya Ollama select karo (free). Ya chat mein key de kar bolo "connect as AI brain".' }));
+  if (provider === 'custom' && !base_url && !effUrl) return res.end(JSON.stringify({ error: 'Custom API ke liye Base URL Settings mein daalo' }));
   const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
   try {
     let reply = '';
     for (let round = 0; round < 8; round++) {
       const r = await fetch(BRAIN_URL, {
-        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + api_key },
+        method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + effKey },
         body: JSON.stringify({ model: brainModel, messages, tools: TOOLS, max_tokens: 1600 })
       });
       if (!r.ok) { const errTxt = await r.text(); return res.end(JSON.stringify({ error: 'OpenAI error: ' + errTxt.slice(0, 200) })); }

@@ -335,7 +335,16 @@
         <select id="setOllamaModel" class="set-input"><option value="">— PC connect karo pehle —</option></select>
         <div class="set-hint">Ollama models automatically list hote hain jab PC connected ho. Install: ollama.com → "ollama pull llama3.2"</div>
       </div>
-      <div class="set-actions">
+      <div class="set-label" style="margin-top:14px">Google Account (Gmail, Calendar, Drive)</div>
+      <div id="googleRow" style="display:flex;align-items:center;gap:10px;padding:12px;border:1px solid var(--border);border-radius:12px;margin-bottom:6px">
+        <span style="font-size:20px">🌐</span>
+        <div style="flex:1">
+          <div id="googleStatus" style="font-size:13px;font-weight:600">Checking...</div>
+          <div style="font-size:11px;color:var(--text-faint)">Connect karo — phir agent khud emails padhega, calendar manage karega, Drive dekhega</div>
+        </div>
+        <button id="googleBtn" class="primary-btn" style="width:auto;flex:0 0 auto;padding:9px 16px" onclick="connectGoogle()">Connect</button>
+      </div>
+      <div class="set-actions
         <button class="ghost-btn" onclick="closeSettings()">Cancel</button>
         <button class="primary-btn" style="width:auto;flex:1" onclick="saveSettings()">Save</button>
       </div>
@@ -1003,6 +1012,12 @@
     }
   }
   initAuth();
+  // Google connect callback se wapas aaye to message dikhao
+  try {
+    const qp = new URLSearchParams(location.search);
+    if (qp.get('google') === 'connected') { setTimeout(() => addMsg('assistant', '✅ Google account connect ho gaya! Ab mujhe bolo — "mere emails padho", "calendar aaj kya hai", "Drive mein kya files hain" — sab khud kar lunga. 🌐'), 600); history.replaceState(null, '', '/'); }
+    if (qp.get('google') === 'error') { setTimeout(() => addMsg('assistant', '⚠️ Google connect fail hua — dobara try karo (Settings > Google Account > Connect).'), 600); history.replaceState(null, '', '/'); }
+  } catch (e) {}
 
   function openSettings() {
     toggleSidebar(false);
@@ -1016,8 +1031,39 @@
     document.getElementById('setCustomKey').value = settings.custom_key || '';
     document.getElementById('setCustomModel').value = settings.custom_model || '';
     refreshOllamaModels();
+    checkGoogleStatus();
   }
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+
+  // ===== GOOGLE ACCOUNT CONNECT =====
+  async function googlePayload(action) { return { action, user_id: uid, access_token: accessToken || undefined }; }
+  async function checkGoogleStatus() {
+    const st = document.getElementById('googleStatus'), btn = document.getElementById('googleBtn');
+    if (!st) return;
+    try {
+      const r = await fetch('/api/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await googlePayload('status')) });
+      const d = await r.json();
+      if (d.connected) {
+        st.innerHTML = '✅ Connected' + (d.email ? ' — ' + d.email : '');
+        btn.textContent = 'Disconnect'; btn.onclick = disconnectGoogle;
+      } else {
+        st.innerHTML = 'Not connected' + (d.setup_help ? ' <span style="color:var(--text-faint)">(admin setup pending)</span>' : '');
+        btn.textContent = 'Connect'; btn.onclick = connectGoogle;
+      }
+    } catch (e) { st.textContent = 'Status check failed'; }
+  }
+  async function connectGoogle() {
+    try {
+      const r = await fetch('/api/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await googlePayload('connect')) });
+      const d = await r.json();
+      if (d.url) { location.href = d.url; } else { alert(d.setup_help || d.error || 'Google not configured'); }
+    } catch (e) { alert('Network error'); }
+  }
+  async function disconnectGoogle() {
+    if (!confirm('Google account disconnect karein?')) return;
+    await fetch('/api/google', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(await googlePayload('disconnect')) });
+    checkGoogleStatus();
+  }
 
   function setProvider(prov) {
     settings.provider = prov;

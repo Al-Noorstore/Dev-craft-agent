@@ -21,6 +21,7 @@ const routes = {
   'files': require('../server/endpoints/files.js'),
   'generate-image': require('../server/endpoints/generate-image.js'),
   'github': require('../server/endpoints/github.js'),
+  'google': require('../server/endpoints/google.js'),
   'gitlab': require('../server/endpoints/gitlab.js'),
   'leads': require('../server/endpoints/leads.js'),
   'notion': require('../server/endpoints/notion.js'),

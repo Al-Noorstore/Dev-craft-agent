@@ -9,6 +9,19 @@
 // ============================================
 const OpenAI = require('openai');
 const vault = require('../lib/credentials.js');
+const google = require('./google.js');
+
+// ---- AI BRAIN providers (OpenAI-compatible) — connect_ai_brain + handler dono use karte hain ----
+const BRAIN_PROVIDERS = {
+  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai', model: 'gemini-2.0-flash', label: 'Google Gemini' },
+  openai:    { url: null, model: 'gpt-4o-mini', label: 'OpenAI' },
+  openrouter:{ url: 'https://openrouter.ai/api/v1', model: 'openrouter/auto', label: 'OpenRouter' },
+  groq:      { url: 'https://api.groq.com/openai/v1', model: 'llama-3.3-70b-versatile', label: 'Groq' },
+  deepseek:  { url: 'https://api.deepseek.com/v1', model: 'deepseek-chat', label: 'DeepSeek' },
+  mistral:   { url: 'https://api.mistral.ai/v1', model: 'mistral-large-latest', label: 'Mistral' },
+  anthropic: { url: 'https://api.anthropic.com/v1', model: 'claude-sonnet-4-20250514', label: 'Anthropic (Claude)' },
+  custom:    { url: null, model: null, label: 'Custom API' },
+};
 const auth = require('../lib/auth.js');
 
 const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft Studio, a web design & web app agency run by Wishal (a student developer from Pakistan).
@@ -44,6 +57,9 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 ## CREDENTIALS SKILL (Solene-style - token par kaam karna):
 - User jo bhi API token/key/credentials chat mein de (ya "token save karo" bole), TURANT save_credential se save karo. Name UPPERCASE standard: GITHUB_TOKEN, GITLAB_TOKEN, NOTION_TOKEN, TELEGRAM_BOT_TOKEN, STRIPE_SECRET_KEY, TWITTER_BEARER_TOKEN, GITHUB/GITLAB/STRIPE waghera.
 - "mere tokens dikhao" => list_credentials. "ye token hatao" => delete_credential (pehle confirm karo).
+- AI API KEY + AI BRAIN: user chat mein koi AI ki API key de (e.g. "ye Gemini ki key hai") aur bole "connect as AI brain" / "is se socho" / "ye use karo" → turant connect_ai_brain chalao (provider = user ka bola hua AI naam: Gemini→gemini, ChatGPT/OpenAI→openai, Claude→anthropic, Groq→groq, DeepSeek→deepseek, Mistral→mistral, OpenRouter→openrouter). Success pe confirm karo: "✅ <AI naam> ab mera brain hai — agli message se isi se sochunga". Agar user key de lekin KYA KARNA hai na bole to ek baar poochho: "kya karun — AI brain banaun ya sirf vault mein save karun?"
+- "brain disconnect / wapas settings wala" bole to delete_credential se BRAIN_API_KEY delete karo.
+- GOOGLE CONNECTED: user ka Google account connect ho (Settings > Google Account) to Gmail/Calendar/Drive ke saare kaam google_request se karo — token khud manage hota hai. "mere emails padho", "calendar mein meeting daalo", "Drive mein kya hai" — sab is se. Connected nahi to Settings > Google Account > Connect bolo.
 - KOI BHI PLATFORM ka kaam: user ka token vault mein ho to api_request use karo — { url, method, token_name, body }. Ye automatically Bearer auth lagata hai. GitHub repos, GitLab, Notion pages, Slack messages, Stripe payments, Twitter posts — koi bhi REST API. 401 aaye to user ko sahi token save karne bolo.
 - Save hone par user ko bolo: "encrypted ho kar save ho gaya ✅ (main sirf masked dikha sakta hoon)". Token kabhi wapas plain text mein mat likhna - sirf pehle 4 aur aakhri 4 characters.
 - Jab bhi kisi tool mein token chahiye (GitHub repo banana, Notion entry, Stripe link, Telegram), PEHLE check karo - saved credential hota to khud use karo aur user ko bolna nahi padta. Vault empty ho to user se token maango.
@@ -95,6 +111,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
   { type: 'function', function: { name: 'run_pc_command', description: 'User ke connected PC/laptop pe terminal command chalao (Windows/Linux). SIRF tab use karo jab user ka PC connected ho - warna batao "pehle Connect PC page se PC connect karo". Commands: file dekhna, projects banana, git, npm, system info waghera.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'shell command, e.g. "dir" (Windows) ya "ls -la" (Linux)' } }, required: ['command'] } } },
+  { type: 'function', function: { name: 'google_request', description: "User ke CONNECTED Google account ka API call — Gmail, Calendar, Drive (token khud manage hota hai). User ne Google account connect kiya ho to 'mere emails padho', 'calendar mein event daalo', 'Drive files dikhao' SAB is tool se karo. url examples: Gmail 'https://gmail.googleapis.com/gmail/v1/users/me/messages', Calendar 'https://www.googleapis.com/calendar/v3/users/me/events', Drive 'https://www.googleapis.com/drive/v3/files'", parameters: { type: 'object', properties: { url: { type: 'string', description: 'poora Google API URL (users/me use karo)' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, body: { type: 'object', description: 'JSON body (POST/PUT/PATCH)' } }, required: ['url'] } } },
+  { type: 'function', function: { name: 'connect_ai_brain', description: "User ki di hui AI API key ko AGENT KA BRAIN bana do. Jab user chat mein koi AI ki key de + bole 'connect as AI brain' / 'isse socho' / 'ye use karo' to ye tool chalao. provider = user ne jo AI ka naam bola: gemini (Google Gemini), openai (OpenAI/ChatGPT), openrouter, groq, deepseek, mistral, anthropic (Claude), custom (base_url chahiye). Save hone ke baad agli message se agent usi AI se sochega — phir user ko confirm bolo.", parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['gemini', 'openai', 'openrouter', 'groq', 'deepseek', 'mistral', 'anthropic', 'custom'] }, api_key: { type: 'string', description: 'user ki di hui API key' }, model: { type: 'string', description: 'specific model (optional, default provider ka best)' }, base_url: { type: 'string', description: 'custom provider ke liye base URL' } }, required: ['provider', 'api_key'] } } },
 ];
 
 // ---------- internal executor (apne hi endpoints ko mock req/res se chalao) ----------
@@ -128,8 +146,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -238,6 +256,42 @@ async function runTool(name, args, steps, uid) {
       return JSON.stringify({ ok: r.ok, status: r.status, data: txt.slice(0, 3500) });
     } catch (e) { step.status = 'error'; step.detail = String(e.message).slice(0, 120); return JSON.stringify({ error: e.message }); }
   }
+  if (name === 'google_request') {
+    epName = null;
+    try {
+      const token = await google.getGoogleAccessToken(uid);
+      if (!token) { step.status = 'error'; step.detail = 'Google account connected nahi'; return JSON.stringify({ error: 'Google account connected nahi hai. User ko bolo: Settings > Google Account > Connect karo. (Ya GOOGLE_CLIENT_ID/SECRET env missing hai)' }); }
+      const meth = (args.method || 'GET').toUpperCase();
+      const opts = { method: meth, headers: { Authorization: 'Bearer ' + token, 'Content-Type': 'application/json' } };
+      if (meth !== 'GET' && meth !== 'HEAD' && args.body) opts.body = JSON.stringify(args.body);
+      const r = await fetch(args.url, opts);
+      const txt = await r.text();
+      step.status = r.ok ? 'done' : 'error';
+      step.detail = 'HTTP ' + r.status;
+      return JSON.stringify({ ok: r.ok, status: r.status, data: txt.slice(0, 4000) });
+    } catch (e) { step.status = 'error'; step.detail = String(e.message).slice(0, 120); return JSON.stringify({ error: e.message }); }
+  }
+  if (name === 'connect_ai_brain') {
+    epName = null;
+    const prov = String(args.provider || '').toLowerCase().trim();
+    const key = String(args.api_key || '').trim();
+    if (!prov || !key) { step.status = 'error'; step.detail = 'provider + api_key chahiye'; return JSON.stringify({ error: 'provider aur api_key dono chahiye' }); }
+    const P = BRAIN_PROVIDERS[prov];
+    if (!P) { step.status = 'error'; step.detail = 'unknown provider ' + prov; return JSON.stringify({ error: 'Unknown provider: ' + prov }); }
+    let burl = P.url;
+    if (prov === 'custom') {
+      burl = String(args.base_url || '').replace(/\/+$/, '');
+      if (!burl) { step.status = 'error'; step.detail = 'custom ko base_url chahiye'; return JSON.stringify({ error: 'Custom provider ke liye base_url chahiye' }); }
+    }
+    await vault.saveCredential('BRAIN_PROVIDER', prov, 'AI brain provider (chat se connected)', uid);
+    await vault.saveCredential('BRAIN_API_KEY', key, 'AI brain API key', uid);
+    await vault.saveCredential('BRAIN_BASE_URL', burl, 'AI brain base URL', uid);
+    await vault.deleteCredential('BRAIN_MODEL', uid).catch(() => {});
+    if (args.model) await vault.saveCredential('BRAIN_MODEL', String(args.model).trim(), 'AI brain model', uid);
+    const masked = key.slice(0, 4) + '...' + key.slice(-4);
+    step.status = 'done'; step.detail = P.label + ' connected (' + masked + ')';
+    return JSON.stringify({ ok: true, connected: true, provider: prov, label: P.label, model: args.model || P.model, masked, note: 'Ab se agent isi AI se sochega. Settings wali key ab override hai. Wapas settings wala brain chahiye to BRAIN_API_KEY delete karo.' });
+  }
   if (name === 'mcp_list_servers') { epName = null; const r = await mcpApi('list', {}, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.servers || []).length + ' servers'); return JSON.stringify(r); }
   if (name === 'mcp_test_server') { epName = null; const r = await mcpApi('test', { name: args.server, url: args.url }, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : ((r.tools || []).length + ' tools mile'); return JSON.stringify(r); }
   if (name === 'mcp_call_tool') { epName = null; const r = await mcpApi('call', { name: args.server, tool: args.tool, args: args.args || {} }, uid); step.status = r.ok === false || r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : 'complete'; return JSON.stringify(r); }
@@ -290,14 +344,23 @@ const handler = async (req, res) => {
     return res.json({ reply: result.reply || '(khali jawab)', steps: [{ title: '🦙 Local Ollama se jawab (' + chosenModel + ')', status: 'done', detail: device.device_name }], links: [] });
   }
 
-  // ---- provider resolve: openai | openrouter | custom ----
-  let baseURL;
-  if (provider === 'openrouter') baseURL = 'https://openrouter.ai/api/v1';
-  else if (provider === 'custom') {
-    if (!req.body.base_url) return res.status(400).json({ error: 'Custom API ke liye base URL chahiye (Settings mein daalo)' });
-    baseURL = req.body.base_url.replace(/\/+$/, '');
+  // ---- VAULT BRAIN: chat se connected AI brain (Settings pe override) ----
+  let effProvider = provider, effKey = api_key, effModel = model, effBaseURL = req.body.base_url;
+  const vBrainKey = await vault.getCredential('BRAIN_API_KEY', uid);
+  if (vBrainKey) {
+    effKey = vBrainKey;
+    effProvider = (await vault.getCredential('BRAIN_PROVIDER', uid)) || 'custom';
+    effBaseURL = await vault.getCredential('BRAIN_BASE_URL', uid);
+    effModel = await vault.getCredential('BRAIN_MODEL', uid) || (BRAIN_PROVIDERS[effProvider] ? BRAIN_PROVIDERS[effProvider].model : undefined);
   }
-  const userKey = api_key || process.env.OPENAI_API_KEY;
+
+  // ---- provider resolve ----
+  let baseURL = effBaseURL || (BRAIN_PROVIDERS[effProvider] ? BRAIN_PROVIDERS[effProvider].url : null);
+  if (effProvider === 'custom') {
+    baseURL = String(baseURL || '').replace(/\/+$/, '');
+    if (!baseURL) return res.status(400).json({ error: 'Custom API ke liye base URL chahiye' });
+  }
+  const userKey = effKey || process.env.OPENAI_API_KEY;
   if (!userKey) {
     return res.status(500).json({ error: 'API key missing - Settings (menu > Settings) mein apni personal API key paste karo (OpenAI / OpenRouter / Custom), ya Vercel pe OPENAI_API_KEY set karo.' });
   }
@@ -315,7 +378,7 @@ const handler = async (req, res) => {
     let reply = '';
     for (let round = 0; round < 4; round++) {
       const completion = await openai.chat.completions.create({
-        model: model || process.env.OPENAI_MODEL || (provider === 'openrouter' ? 'openrouter/auto' : 'gpt-4o-mini'),
+        model: effModel || (BRAIN_PROVIDERS[effProvider] ? BRAIN_PROVIDERS[effProvider].model : null) || process.env.OPENAI_MODEL || 'gpt-4o-mini',
         messages, tools: TOOLS, max_tokens: 1500,
       });
       const msg = completion.choices[0].message;
