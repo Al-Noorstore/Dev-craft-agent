@@ -402,6 +402,11 @@
 
   const chat = document.getElementById('chat');
   const input = document.getElementById('input');
+  // DRAFT SAFE: refresh ya Google auth ke dauraan likha prompt khoota nahi
+  try {
+    const _draft = localStorage.getItem('dc_draft');
+    if (_draft) { input.value = _draft; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; }
+  } catch (e) {}
 
   const BOLT_SVG = '<svg width="14" height="14" viewBox="0 0 24 24" fill="white"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg>';
   const COPY_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.8"/></svg>';
@@ -589,6 +594,7 @@
     if (welcomeEl) welcomeEl.remove();
     input.value = '';
     input.style.height = 'auto';
+    try { localStorage.removeItem('dc_draft'); } catch (e) {}
     addMsg(text, 'user');
     const c = current();
     if (c.title === 'New Chat') { c.title = text.slice(0, 32) + (text.length > 32 ? '...' : ''); renderSidebar(); }
@@ -1066,6 +1072,15 @@
     }
   }
   initAuth();
+  // NAYA USER: 2 sec baad login card khud pop up (sirf first visit, logged-in user ko nahi)
+  setTimeout(() => {
+    try {
+      if (authUser) return;
+      if (localStorage.getItem('dc_login_prompted')) return;
+      localStorage.setItem('dc_login_prompted', '1');
+      openLoginModal();
+    } catch (e) {}
+  }, 2000);
   // Google connect callback se wapas aaye to message dikhao
   try {
     const qp = new URLSearchParams(location.search);
@@ -1179,6 +1194,7 @@
   input.addEventListener('input', () => {
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 120) + 'px';
+    try { localStorage.setItem('dc_draft', input.value); } catch (e) {}
   });
   input.addEventListener('keydown', e => {
     if (e.key === 'Enter' && !e.shiftKey && window.innerWidth > 768) { e.preventDefault(); sendMsg(); }
