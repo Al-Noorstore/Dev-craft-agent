@@ -1041,8 +1041,15 @@
     }
   }
   async function signOutNow() {
-    if (sbClient) await sbClient.auth.signOut();
+    closeAcctPop();
+    // FIXED: pehle global signOut try karo (server revoke) - lekin network fail ho to bhi logout HONA chahiye
+    try { if (sbClient) sbClient.auth.signOut({ scope: 'global' }).catch(() => {}); } catch (e) {}
+    // Brute-force: local session khud saaf karo (network pe depend zero)
+    try { Object.keys(localStorage).filter(k => k.indexOf('sb-') === 0 || k.indexOf('supabase') >= 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
+    accessToken = null;
+    authUser = null;
     applySession(null);
+    location.reload(); // saaf-suthra logged-out state, koi stale UI nahi
   }
   // ===== PWA INSTALL (DC Agent — Android shortcut) =====
   let deferredPrompt = null;
