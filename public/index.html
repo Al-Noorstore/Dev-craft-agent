@@ -914,7 +914,7 @@
       if (!window.supabase) {
         await new Promise((res, rej) => {
           const s = document.createElement('script');
-          s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+          s.src = '/supabase.js'; // self-hosted — CDN (jsdelivr) PK mein block hota hai
           s.onload = res; s.onerror = rej;
           document.head.appendChild(s);
         });
@@ -982,8 +982,12 @@
   function closeAcctPop() { const p = document.getElementById('acctPop'); if (p) p.classList.remove('open'); }
   document.addEventListener('click', (e) => { const w = document.getElementById('acctWrap'); if (w && !w.contains(e.target)) closeAcctPop(); });
   async function signInGoogle() {
-    if (!sbClient) return;
-    await sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin } });
+    if (!sbClient) { alert('Login module load nahi hua — page refresh kar ke dobara try karo.'); return; }
+    try {
+      await sbClient.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin } });
+    } catch (e) {
+      alert('Google login error: ' + (e.message || e));
+    }
   }
   async function signOutNow() {
     if (sbClient) await sbClient.auth.signOut();
