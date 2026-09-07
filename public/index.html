@@ -951,10 +951,10 @@
       sbClient = window.supabase.createClient(cfg.supabase_url, cfg.supabase_anon_key);
       // google provider on hai? (public auth settings)
       try {
-        const sr = await fetch(cfg.supabase_url + '/auth/v1/settings');
+        const sr = await fetch(cfg.supabase_url + '/auth/v1/settings', { headers: { apikey: cfg.supabase_anon_key } });
         const sd = await sr.json();
         googleOn = !!(sd && sd.external && sd.external.google);
-      } catch (e) {}
+      } catch (e) { googleOn = true; }
       sbClient.auth.onAuthStateChange((_ev, session) => applySession(session));
       const { data } = await sbClient.auth.getSession();
       applySession(data && data.session);
