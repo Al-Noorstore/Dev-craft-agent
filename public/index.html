@@ -899,7 +899,7 @@
 
   async function startPair() {
     try {
-      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'start_pair' }) });
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'start_pair' }) });
       const d = await r.json();
       if (!d.success) { alert('Error: ' + (d.error || d.setup_help || 'Supabase setup missing')); return; }
       pairedCode = d.code; pairDeviceId = d.device_id;
@@ -916,7 +916,7 @@
       (pairedCode ? '<div class="pairing-code">' + pairedCode + '</div><div class="dev-meta">Apne PC pe ye final command chalao: <b>node bridge.js ' + pairedCode + '</b></div>' : '<div class="dev-meta">"Get pairing code" dabao pehle.</div>') +
       '</div>';
     try {
-      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'devices' }) });
       const d = await r.json();
       if (d.success && d.devices) {
         const devs = d.devices;
@@ -938,7 +938,7 @@
   }
 
   async function disconnectPC(id) {
-    await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'disconnect', device_id: id }) });
+    await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'disconnect', device_id: id }) });
     renderConnectStatus();
   }
 
@@ -950,7 +950,7 @@
 
   async function updatePCDotAsync() {
     try {
-      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'devices' }) });
       const d = await r.json();
       updatePCDot(d.success && (d.devices || []).some(x => x.online));
     } catch (e) {}
@@ -1291,7 +1291,7 @@
     const sel = document.getElementById('setOllamaModel');
     st.textContent = 'Checking connected PC...';
     try {
-      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      const r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'devices' }) });
       const d = await r.json();
       if (!d.success) { st.textContent = '⚠️ ' + (d.error || 'Supabase setup missing'); return; }
       const online = (d.devices || []).filter(x => x.online);
@@ -1359,7 +1359,7 @@
   </div>
 </div>
 <script>
-  var termMode = 'detecting', termDev = null, termHist = [], termHi = -1;
+  var termMode = 'detecting', termDev = null, termDevs = [], termHist = [], termHi = -1;
   function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   function termOut(html, cls) { var o = document.getElementById('termOut'); var d = document.createElement('div'); if (cls) d.className = cls; d.innerHTML = html; o.appendChild(d); o.scrollTop = o.scrollHeight; }
   function showTerminal() { toggleSidebar(false); document.getElementById('termWrap').style.display = 'flex'; document.getElementById('termOut').innerHTML = ''; termOut('DevCraft Terminal — asli commands tumhare laptop pe chalti hain (mobile/browser sirf remote hai).\n"help" likho examples ke liye.', 'sys'); termDetect(); setTimeout(function () { document.getElementById('termIn').focus(); }, 100); }
@@ -1375,16 +1375,44 @@
       var d = await r.json();
       if (d && d.ok) { termMode = 'local'; document.getElementById('termStatus').innerHTML = '<span style="color:#22c55e">● DIRECT — laptop agent (localhost:3155)</span>'; return; }
     } catch (e) {}
-    // 2) cloud bridge device online? → commands us laptop pe chalenge
+    // 2) cloud bridge devices online? (sirf TUMHARE wale — per-user)
     try {
-      var r2 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      var r2 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'devices' }) });
+      if (r2.status === 401) { termMode = 'none'; document.getElementById('termStatus').innerHTML = '<span style="color:#ef4444">● LOGIN chahiye</span>'; termOut('🔐 Remote terminal ke liye pehle Sign in karo (sidebar → Sign in).\n(Usi laptop pe Desktop app khula ho to bina login bhi DIRECT mode chalta hai)', 'err'); return; }
       var d2 = await r2.json();
-      var dev = (d2.devices || []).find(function (x) { return x.online; });
-      if (dev) { termMode = 'cloud'; termDev = dev.id; document.getElementById('termStatus').innerHTML = '<span style="color:#22c55e">● CLOUD BRIDGE — ' + esc(dev.device_name || 'PC') + ' (commands is laptop pe chalenge)</span>'; return; }
+      var on = (d2.devices || []).filter(function (x) { return x.online; });
+      if (on.length === 1) { termMode = 'cloud'; termDev = on[0].id; document.getElementById('termStatus').innerHTML = '<span style="color:#22c55e">● CLOUD BRIDGE — ' + esc(on[0].device_name || 'device') + '</span>'; return; }
+      if (on.length > 1) {
+        termMode = 'cloud'; termDevs = on; termDev = on[0].id;
+        var opts = on.map(function (d, i) { return '<option value="' + d.id + '"' + (i === 0 ? ' selected' : '') + '>' + esc(d.device_name || 'device') + '</option>'; }).join('');
+        document.getElementById('termStatus').innerHTML = '<span style="color:#22c55e">● CLOUD BRIDGE</span> <select id="termPick" onchange="termDev=this.value" style="background:#0b0e13;color:#e5e7eb;border:1px solid #1f2937;border-radius:6px;padding:2px 6px;font-size:12px">' + opts + '</select>';
+        return;
+      }
     } catch (e) {}
     termMode = 'none';
-    document.getElementById('termStatus').innerHTML = '<span style="color:#ef4444">● OFFLINE — koi device online nahi</span>';
-    termOut('❌ Koi connected laptop nahi mila.\n• Laptop pe Dev Craft Agent (Desktop) kholo — agar usi laptop pe ho to direct connect ho jayega\n• Ya Connect PC (💻) se pair karo\n(Phone ka apna terminal browser se nahi chal sakta — OS restriction hai, isliye ye tumhare laptop ki power use karta hai)', 'err');
+    document.getElementById('termStatus').innerHTML = '<span style="color:#ef4444">● OFFLINE — koi device connected nahi</span>';
+    termSetupCard();
+  }
+  function termSetupCard() {
+    var isAndroid = /Android/i.test(navigator.userAgent);
+    var isIOS = /iPhone|iPad/i.test(navigator.userAgent);
+    if (isIOS) { termOut('❌ iPhone/iPad pe device terminal possible nahi (Apple apps ko shell access nahi deta). Laptop pe Desktop app use karo.', 'err'); return; }
+    if (isAndroid) {
+      termOut('📱 <b>Apne PHONE pe commands chalao — Termux ki tarah</b>\nBrowser phone ka terminal nahi bana sakta (OS rule), lekin 2 minute ka setup:\n\n<b>STEP 1:</b> Play Store se <b>Termux</b> install karo (ya F-Droid: f-droid.org pe "Termux")\n<b>STEP 2:</b> Termux kholo, ye chalao:\n  pkg install nodejs -y\n<b>STEP 3:</b> Agent download karo:\n  curl -o mobile-agent.js https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/0dac85824_mobile-agent.js\n<b>STEP 4:</b> Neeche "📱 Pairing code lo" dabao, phir Termux mein:\n  node mobile-agent.js <CODE>\n\nBas! Ab is Terminal mein jo likhoge wo PHONE pe chalega (phone ki power).', 'sys');
+      termOut('<button onclick="termGetCode()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer">📱 Pairing code lo</button> <span id="termCodeBox" style="margin-left:10px;color:#60a5fa;font-weight:600"></span>', 'sys');
+    } else {
+      termOut('💻 <b>Koi connected laptop/PC nahi mila.</b>\n• Laptop pe Dev Craft Agent (Desktop) kholo — usi laptop pe ho to DIRECT connect ho jayega\n• Ya "Connect PC" page se pair karo\n• Phone se: Android pe Termux setup (Termux app → node mobile-agent.js <CODE>)', 'sys');
+    }
+  }
+  async function termGetCode() {
+    try {
+      var r = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'start_pair' }) });
+      var d = await r.json();
+      if (r.status === 401) { alert('Pehle Sign in karo (sidebar)'); return; }
+      if (!d.success) { alert('Error: ' + (d.error || 'pairing fail')); return; }
+      document.getElementById('termCodeBox').innerHTML = 'CODE: <b style="font-size:16px">' + d.code + '</b> — Termux mein: node mobile-agent.js ' + d.code;
+      termOut('✅ Code mila: <b>' + d.code + '</b> — Termux mein ye chalao:\n  node mobile-agent.js ' + d.code + '\n(chalne ke baad yahan koi bhi command likho — phone pe chalegi)', 'sys');
+    } catch (e) { alert('Network error: ' + e.message); }
   }
   async function termRun(cmd) {
     if (!cmd) return;
@@ -1398,13 +1426,13 @@
     } else if (termMode === 'cloud') {
       termOut('→ command laptop ko bheja, result ka wait…', 'sys');
       try {
-        var r2 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'exec', device_id: termDev, command: cmd }) });
+        var r2 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'exec', device_id: termDev, command: cmd }) });
         var d2 = await r2.json();
         if (!d2.success) { termOut('❌ ' + esc(d2.error || 'job fail'), 'err'); return; }
         var jobId = d2.job_id;
         for (var i = 0; i < 90; i++) {
           await new Promise(function (res) { setTimeout(res, 1000); });
-          var r3 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'job_status', job_id: jobId }) });
+          var r3 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: 'Bearer ' + accessToken } : {}) }, body: JSON.stringify({ action: 'job_status', job_id: jobId }) });
           var d3 = await r3.json();
           var job = d3.job;
           if (job && (job.status === 'done' || job.status === 'error')) {
@@ -1416,8 +1444,7 @@
         termOut('⏱️ Timeout — laptop agent se 90s mein jawab nahi aaya (laptop on hai?)', 'err');
       } catch (e) { termOut('❌ ' + esc(e.message), 'err'); termDetect(); }
     } else {
-      termOut('Device offline — pehle Connect PC ya Desktop app kholo.', 'err');
-      termDetect();
+      termSetupCard();
     }
   }
   document.addEventListener('keydown', function (e) {

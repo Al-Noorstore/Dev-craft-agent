@@ -34,13 +34,28 @@ module.exports = async (req, res) => {
     const headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
     const body = req.body || {};
     const action = body.action || 'devices';
+    const SB_ANON = process.env.SUPABASE_ANON_KEY;
+
+    // user verify (Supabase auth token se) - per-user privacy ke liye
+    async function getUserId() {
+      const h = req.headers.authorization || '';
+      if (!h.startsWith('Bearer ') || h.length < 30 || !SB_ANON) return null;
+      try {
+        const r = await fetch(SB_URL + '/auth/v1/user', { headers: { apikey: SB_ANON, Authorization: h } });
+        if (!r.ok) return null;
+        const u = await r.json();
+        return u && u.id ? u.id : null;
+      } catch (e) { return null; }
+    }
 
     // ---- START PAIR: UI code maangta hai ----
     if (action === 'start_pair') {
+      const uid = await getUserId();
+      if (!uid) return res.status(401).json({ error: 'Pehle login karo (Sign in) - pairing user-specific hai' });
       const code = require('crypto').randomBytes(3).toString('hex').toUpperCase().slice(0, 6);
       const insRes = await fetch(SB_URL + '/rest/v1/bridge_devices', {
         method: 'POST', headers,
-        body: JSON.stringify({ code, device_name: 'Waiting for PC...', os: 'unknown', status: 'pairing', ollama_models: [] })
+        body: JSON.stringify({ code, user_id: uid, device_name: 'Waiting for device...', os: 'unknown', status: 'pairing', ollama_models: [] })
       });
       if (!insRes.ok) return res.status(500).json({ error: 'Supabase insert failed: ' + (await insRes.text()).slice(0, 150) });
       const rows = await insRes.json();
@@ -51,9 +66,14 @@ module.exports = async (req, res) => {
     if (action === 'exec') {
       const { device_id, command } = body;
       if (!device_id || !command) return res.status(400).json({ error: 'device_id + command required' });
+      const uid = await getUserId();
+      if (!uid) return res.status(401).json({ error: 'Pehle login karo' });
+      const devRes = await fetch(SB_URL + '/rest/v1/bridge_devices?id=eq.' + encodeURIComponent(device_id) + '&select=user_id', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
+      const devRows = await devRes.json();
+      if (!devRows.length || devRows[0].user_id !== uid) return res.status(403).json({ error: 'Ye device tumhare account se connected nahi' });
       const insRes = await fetch(SB_URL + '/rest/v1/bridge_jobs', {
         method: 'POST', headers,
-        body: JSON.stringify({ device_id, type: 'shell', payload: { command: String(command).slice(0, 2000) }, status: 'pending' })
+        body: JSON.stringify({ device_id, user_id: uid, type: 'shell', payload: { command: String(command).slice(0, 2000) }, status: 'pending' })
       });
       if (!insRes.ok) return res.status(500).json({ error: 'Job insert failed: ' + (await insRes.text()).slice(0, 120) });
       const rows = await insRes.json();
@@ -64,9 +84,14 @@ module.exports = async (req, res) => {
     if (action === 'run_tool') {
       const { device_id, tool, args } = body;
       if (!device_id || !tool) return res.status(400).json({ error: 'device_id + tool required' });
+      const uid = await getUserId();
+      if (!uid) return res.status(401).json({ error: 'Pehle login karo' });
+      const devRes = await fetch(SB_URL + '/rest/v1/bridge_devices?id=eq.' + encodeURIComponent(device_id) + '&select=user_id', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
+      const devRows = await devRes.json();
+      if (!devRows.length || devRows[0].user_id !== uid) return res.status(403).json({ error: 'Ye device tumhare account se connected nahi' });
       const insRes = await fetch(SB_URL + '/rest/v1/bridge_jobs', {
         method: 'POST', headers,
-        body: JSON.stringify({ device_id, type: 'tool', payload: { tool: String(tool).slice(0, 60), args: args || {} }, status: 'pending' })
+        body: JSON.stringify({ device_id, user_id: uid, type: 'tool', payload: { tool: String(tool).slice(0, 60), args: args || {} }, status: 'pending' })
       });
       if (!insRes.ok) return res.status(500).json({ error: 'Job insert failed: ' + (await insRes.text()).slice(0, 120) });
       const rows = await insRes.json();
@@ -123,7 +148,9 @@ module.exports = async (req, res) => {
 
     // ---- DEVICES: UI ke liye list (online = last_seen < 60s pehle) ----
     if (action === 'devices') {
-      const dRes = await fetch(SB_URL + '/rest/v1/bridge_devices?select=*&order=created_at.desc', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
+      const uid = await getUserId();
+      if (!uid) return res.status(401).json({ error: 'Pehle login karo' });
+      const dRes = await fetch(SB_URL + '/rest/v1/bridge_devices?user_id=eq.' + uid + '&select=*&order=created_at.desc', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
       if (!dRes.ok) return res.status(500).json({ error: 'Devices fetch failed: ' + (await dRes.text()).slice(0, 150) });
       const devices = await dRes.json();
       const now = Date.now();
@@ -135,9 +162,12 @@ module.exports = async (req, res) => {
     if (action === 'job_status') {
       const { job_id } = body;
       if (!job_id) return res.status(400).json({ error: 'job_id required' });
+      const uid = await getUserId();
+      if (!uid) return res.status(401).json({ error: 'Pehle login karo' });
       const jRes = await fetch(SB_URL + '/rest/v1/bridge_jobs?id=eq.' + encodeURIComponent(job_id) + '&select=*', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
       if (!jRes.ok) return res.status(500).json({ error: 'Job fetch failed' });
       const rows = await jRes.json();
+      if (rows.length && rows[0].user_id !== uid) return res.status(403).json({ error: 'Ye job tumhara nahi' });
       return res.json({ success: true, job: rows[0] || null });
     }
 
