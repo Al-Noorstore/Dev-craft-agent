@@ -310,4 +310,77 @@ async function ytClose() {
   return { ok: true, closed: yt.length };
 }
 
-module.exports = { ytOpen, ytSearch, ytPlay, ytSearchPlay, ytClose };
+// ---- GENERIC CHROME AUTOMATION ----
+// WhatsApp Web wala tab is tools se kabhi touch nahi hota
+function isWaTab(t) { return t && t.type === 'page' && (t.url || '').includes('web.whatsapp.com'); }
+function pageTabs() { return listTabs().then(l => l.filter(t => t && t.type === 'page' && !isWaTab(t))); }
+
+// koi bhi website kholo — same site ka tab ho to wahi reuse
+async function chromeOpen(url) {
+  const u = String(url || '').trim();
+  if (!u) return { error: 'url chahiye' };
+  const full = u.startsWith('http') ? u : 'https://' + u;
+  const up = await ensureBrowser();
+  if (up.error) return up;
+  let host = ''; try { host = new URL(full).hostname; } catch (e) { return { error: 'url sahi nahi hai' }; }
+  const tabs = await pageTabs();
+  const same = tabs.find(t => (t.url || '').includes(host));
+  if (same && same.webSocketDebuggerUrl) {
+    try { const cdp = await cdpConnect(same.webSocketDebuggerUrl); await evaluate(cdp, `location.href = ${JSON.stringify(full)}`); cdp.close(); await activateTab(same.id); return { ok: true, tab: 'same', url: full }; } catch (e) {}
+  }
+  const t = await newTab(full);
+  if (!t) return { error: 'Tab nahi khul saka — dobara try karo' };
+  await activateTab(t.id);
+  return { ok: true, tab: 'new', url: full };
+}
+
+// saare tabs ki list (numbered, WhatsApp tab ke bina)
+async function chromeTabs() {
+  const up = await ensureBrowser();
+  if (up.error) return up;
+  const tabs = await pageTabs();
+  return { ok: true, total: tabs.length, tabs: tabs.map((t, i) => ({ number: i + 1, title: (t.title || '').slice(0, 70), url: (t.url || '').slice(0, 90) })) };
+}
+
+// tab band karo — number ya naam/keyword se (WhatsApp tab SAFE hai, kabhi band nahi hoga)
+async function chromeClose(target) {
+  const up = await ensureBrowser();
+  if (up.error) return up;
+  const tabs = await pageTabs();
+  if (!tabs.length) return { ok: true, closed: 0, note: 'koi tab khula nahi (WhatsApp tab is tool se band nahi hota)' };
+  let victim = null;
+  const num = parseInt(String(target || ''), 10);
+  if (num >= 1 && String(num) === String(target).trim()) victim = tabs[num - 1];
+  else if (target) {
+    const q = String(target).toLowerCase();
+    victim = tabs.find(t => ((t.title || '') + ' ' + (t.url || '')).toLowerCase().includes(q));
+  }
+  if (!victim) return { error: 'Tab nahi mila — chrome {action:tabs} se number lo' };
+  const okc = await closeTab(victim.id);
+  return okc ? { ok: true, closed: 1, tab: (victim.title || victim.url || '').slice(0, 60) } : { error: 'Tab band nahi hua' };
+}
+
+// Google search — khula Google tab ho to usi mein
+async function googleSearch(query) {
+  const q = String(query || '').trim();
+  if (!q) return { error: 'search keyword chahiye' };
+  return chromeOpen('https://www.google.com/search?q=' + encodeURIComponent(q));
+}
+
+// ---- DIAGNOSTIC CHECK ----
+async function browserCheck() {
+  const bin = findBrowser();
+  const ver = await versionInfo();
+  const all = await listTabs();
+  const pages = all.filter(t => t && t.type === 'page');
+  return {
+    browser_installed: bin ? path.basename(bin) : null,
+    automation_browser_running: !!ver,
+    total_tabs: pages.length,
+    youtube_tabs: pages.filter(isYtTab).length,
+    whatsapp_web_tab: pages.some(isWaTab),
+    tabs: pages.map((t, i) => ({ number: i + 1, title: (t.title || '').slice(0, 60), url: (t.url || '').slice(0, 80) }))
+  };
+}
+
+module.exports = { ytOpen, ytSearch, ytPlay, ytSearchPlay, ytClose, chromeOpen, chromeTabs, chromeClose, googleSearch, browserCheck };
