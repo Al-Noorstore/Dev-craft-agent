@@ -98,6 +98,28 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 - Every site must include privacy policy, terms, license (client can't resell).
 - CLIENT HANDLING: naya client mile to pehle Wishal ko batana. Source code kabhi client ko mat dena bina Wishal ki permission ke. Payment kabhi accept mat karna bina Wishal ke approval ke (Payoneer international, JazzCash Pakistan).
 
+## MEMORY (yaadash - per-user, cross-session):
+- "mera bhai Ali hai", "ye number note karo", "folder kahan banaya" → remember_fact TURANT (user ke dobara bole bina)
+- "bhai/behen/Ali/folder/number" ka zikr → PEHLE recall_facts → mil gaya to use karo, nahi mila to poocho + save karo
+- Phone pe call: "call karo" → recall_facts se number → run_pc_command: termux-call-number <number> (Termux device pe)
+
+## MOBILE DEVICE (Termux phone - EXTRA POWERS, Termux:API se):
+Phone connected ho to ye sab bhi chal sakta hai (PEHLE user se bolo: Termux:API app install karo + "pkg install termux-api" chalao - ek baar):
+- Call dial: termux-call-number 03001234567 | SMS: termux-sms-send -n 03001234567 "message"
+- Contacts PADHNA: termux-contact-list | Clipboard copy: termux-clipboard-set "text"
+- Battery: termux-battery-status | Location: termux-location | Notification: termux-notification --title "x" --content "y"
+- Bolkar jawab: termux-tts-speak "message" | Camera photo: termux-camera-photo -c 0 photo.jpg
+- Folders: mkdir ~/projects (Termux home) | Shared storage (PEHLE "termux-setup-storage" ek baar): /sdcard/Download/projects, /sdcard/DCIM waghera - ls /sdcard/ se dekho
+- File yaad rakhna: remember_fact use karo (folder ka naam + raasta)
+- "termux-api: not found" aaye to user ko bolo: Termux:API app + pkg install termux-api
+
+## MOBILE LIMITS (user ko sahi batana, jhooth nahi):
+- POWER OFF: nahi ho sakta (Android security - koi bhi app nahi kar sakta bina root)
+- SCREEN LOCK: Termux se nahi (Android Device Admin chahiye hota hai)
+- CONTACTS SAVE/LIKHNA: nahi (sirf padh sakte) - clipboard mein number copy karke user khud save kare, ya apni memory (remember_fact) mein rakh lo - tum yaad rakhoge, "Ali ka number" poochne pe turant doge
+- WhatsApp APP control nahi (sirf WhatsApp Cloud API ya SMS/Call)
+- Phone ka screen off / Termux band = commands nahi chalenge (wakelock ke liye: termux-wake-lock)
+
 ## DEVICE RULES (run_pc_command + run_device_tool - user ke APNE connected device, per-user private):
 - run_pc_command: shell command user ke connected device pe (laptop/desktop app YA Android phone via Termux). Termux pe Android apps/CLI: pkg install. Windows pe: winget. Har user ko SIRF apna device dikhta hai (privacy).
 - run_device_tool: SIRF laptop/desktop-app devices ke liye (whatsapp_send {to,text}, youtube {query,number}, chrome, file_*). User bole "laptop se WhatsApp bhejo" to isse.
@@ -134,6 +156,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
   { type: 'function', function: { name: 'run_pc_command', description: 'User ke CONNECTED DEVICE (laptop/desktop app ya Android phone-Termux) pe terminal command chalao. User bole "PC/laptop/phone pe ye karo", "python install karo", "project banao", "files dikhao" etc to YE use karo. Koi device connected na ho to user ko Setup batao: laptop = Desktop app ya Connect PC; Android = Terminal page > Pairing code > Termux (node mobile-agent.js <code>). Commands OS ke hisab se: Windows (dir), Linux/Android/Termux (ls).', parameters: { type: 'object', properties: { command: { type: 'string', description: 'shell command, e.g. "dir" (Windows), "ls -la" (Linux/Mac/Termux), "pkg install python -y" (Termux)' } }, required: ['command'] } } },
+  { type: 'function', function: { name: 'remember_fact', description: 'User ki baat YAAD RAKHO (per-user memory): rishtedaar (bhai/behen/parents) naam + numbers, folder locations, user ki preferences, important facts. Jab user bole "yaad rakho", "note karo", "mera bhai X hai", "ye number save karo", "folder yahan banaya tha" to YE turant chalao (dobara poochna nahi).', parameters: { type: 'object', properties: { key: { type: 'string', description: 'chhota pehchana naam, e.g. bhai, ali_number, projects_folder' }, value: { type: 'string', description: 'jo yaad rakhna hai, e.g. "Ali, number 03001234567, mere bhai hain"' }, note: { type: 'string', description: 'extra note (optional)' } }, required: ['key', 'value'] } } },
+  { type: 'function', function: { name: 'recall_facts', description: 'Apni memory check karo. Jab user kisi rishtedaar/number/folder ka zikr kare ("bhai ko call karo", "wo folder kahan tha", "Ali ka number") to PEHLE ye chalao. Kuch na mile to user se poocho + remember_fact se save karo.', parameters: { type: 'object', properties: { search: { type: 'string', description: 'search word, e.g. bhai, number, folder, Ali' } }, required: ['search'] } } },
+  { type: 'function', function: { name: 'forget_fact', description: 'User kahe "bhula jao / ye note hatao" to memory se remove karo.', parameters: { type: 'object', properties: { search: { type: 'string', description: 'jo bhulana hai' } }, required: ['search'] } } },
   { type: 'function', function: { name: 'run_device_tool', description: 'User ke connected DEVICE ke desktop tools chalao cloud se (sirf laptop/desktop app devices pe - Termux phone pe nahi): whatsapp_send, whatsapp_open_chat, whatsapp_web connect/status, youtube open/search/play, chrome open/tabs/close/search, file_list/file_read/file_write. User bole "laptop se WhatsApp bhejo" ya "laptop pe YouTube kholo" to YE use karo.', parameters: { type: 'object', properties: { tool: { type: 'string', description: 'tool ka naam, e.g. whatsapp_send, youtube, chrome, file_list' }, args: { type: 'object', description: 'tool ke arguments, e.g. {to:"naam", text:"message"} ya {query:"search", number:2}' } }, required: ['tool'] } } },
   { type: 'function', function: { name: 'google_request', description: "User ke CONNECTED Google account ka API call — Gmail, Calendar, Drive (token khud manage hota hai). User ne Google account connect kiya ho to 'mere emails padho', 'calendar mein event daalo', 'Drive files dikhao' SAB is tool se karo. url examples: Gmail 'https://gmail.googleapis.com/gmail/v1/users/me/messages', Calendar 'https://www.googleapis.com/calendar/v3/users/me/events', Drive 'https://www.googleapis.com/drive/v3/files'", parameters: { type: 'object', properties: { url: { type: 'string', description: 'poora Google API URL (users/me use karo)' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, body: { type: 'object', description: 'JSON body (POST/PUT/PATCH)' } }, required: ['url'] } } },
   { type: 'function', function: { name: 'whatsapp_connect', description: "User ka APNA WhatsApp Cloud API (Meta) connect karo — per-user. User Meta Business se Permanent Access Token + Phone Number ID dega. Dono encrypted vault mein save hote hain. Baad mein whatsapp_send se user ke number se messages jayenge.", parameters: { type: 'object', properties: { token: { type: 'string', description: 'Meta permanent access token (EAAG...)' }, phone_id: { type: 'string', description: 'Phone Number ID (digits)' } }, required: ['token', 'phone_id'] } } },
@@ -173,8 +198,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', run_device_tool: '🔧', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠', whatsapp_connect: '💬', whatsapp_status: '💬', whatsapp_send: '💬' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'Device pe command chala raha hoon', run_device_tool: 'Device ka tool chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon', whatsapp_connect: 'WhatsApp Cloud API connect kar raha hoon', whatsapp_status: 'WhatsApp connection check kar raha hoon', whatsapp_send: 'WhatsApp message bhej raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', run_device_tool: '🔧', remember_fact: '🧠', recall_facts: '🧠', forget_fact: '🧠', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠', whatsapp_connect: '💬', whatsapp_status: '💬', whatsapp_send: '💬' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'Device pe command chala raha hoon', run_device_tool: 'Device ka tool chala raha hoon', remember_fact: 'Yaad rakh raha hoon', recall_facts: 'Yaadash check kar raha hoon', forget_fact: 'Bhula raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon', whatsapp_connect: 'WhatsApp Cloud API connect kar raha hoon', whatsapp_status: 'WhatsApp connection check kar raha hoon', whatsapp_send: 'WhatsApp message bhej raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -233,6 +258,33 @@ async function waitBridgeJob(jobId, maxMs, uid) {
   return null;
 }
 
+// agent memory (agent_notes) - service key + verified uid
+async function notesApi(uid, op, data) {
+  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  const H = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json' };
+  try {
+    if (op === 'insert') {
+      const r = await fetch(SB_URL + '/rest/v1/agent_notes', { method: 'POST', headers: { ...H, Prefer: 'return=representation' }, body: JSON.stringify({ user_id: uid, key: String(data.key).slice(0, 120), value: data.value }) });
+      if (!r.ok) return { error: 'save fail' };
+      return { saved: true, key: data.key };
+    }
+    if (op === 'search') {
+      const q = encodeURIComponent('%' + String(data.q || '').slice(0, 100) + '%');
+      const r = await fetch(SB_URL + '/rest/v1/agent_notes?user_id=eq.' + encodeURIComponent(uid) + '&or=(key.ilike.' + q + ',value::text.ilike.' + q + ')&select=*&order=created_at.desc&limit=20', { headers: H });
+      if (!r.ok) return { notes: [], error: 'search fail' };
+      const rows = await r.json();
+      return { notes: rows.map(x => ({ key: x.key, value: x.value })) };
+    }
+    if (op === 'delete') {
+      const q = encodeURIComponent('%' + String(data.q || '').slice(0, 100) + '%');
+      const r = await fetch(SB_URL + '/rest/v1/agent_notes?user_id=eq.' + encodeURIComponent(uid) + '&or=(key.ilike.' + q + ',value::text.ilike.' + q + ')', { method: 'DELETE', headers: H });
+      if (!r.ok) return { error: 'delete fail' };
+      return { deleted: true };
+    }
+  } catch (e) { return { error: e.message }; }
+  return { error: 'unknown op' };
+}
+
 // mcp endpoint ko in-process call karo (verified uid ke saath)
 async function mcpApi(action, body, uid) {
   return new Promise((resolve) => {
@@ -267,6 +319,30 @@ async function runTool(name, args, steps, uid) {
     const result = await waitBridgeJob(jobId, 35000, uid);
     if (result === null) return JSON.stringify({ error: 'Device se jawab nahi aaya (timeout) - device online hai? command: ' + args.command });
     return JSON.stringify(result);
+  }
+  if (name === 'remember_fact') {
+    epName = null;
+    const key = (args.key || args.name || '').trim();
+    if (!key) return JSON.stringify({ error: 'key do (e.g. bhai, ali_number, projects_folder)' });
+    const val = args.value !== undefined ? args.value : args.text;
+    const r = await notesApi(uid, 'insert', { key, value: { value: val, note: args.note || null } });
+    step.status = r.error ? 'error' : 'done';
+    step.detail = r.error ? r.error : 'yaad rakh liya: ' + key;
+    return JSON.stringify(r);
+  }
+  if (name === 'recall_facts') {
+    epName = null;
+    const r = await notesApi(uid, 'search', { q: args.search || args.query || '' });
+    step.status = r.error ? 'error' : 'done';
+    step.detail = r.error ? r.error : ((r.notes || []).length + ' notes mile');
+    return JSON.stringify(r);
+  }
+  if (name === 'forget_fact') {
+    epName = null;
+    const r = await notesApi(uid, 'delete', { q: args.search || args.key || '' });
+    step.status = r.error ? 'error' : 'done';
+    step.detail = r.error ? r.error : 'bhula diya';
+    return JSON.stringify(r);
   }
   if (name === 'run_device_tool') {
     // user ke connected device ke DESKTOP tools (whatsapp_send, youtube, files...) cloud bridge se

@@ -118,3 +118,15 @@ create policy "own creds" on credentials for all
   using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
 create policy "own mcp" on mcp_servers for all
   using (auth.uid()::text = user_id) with check (auth.uid()::text = user_id);
+
+-- ===== AGENT MEMORY (per-user yaadash: rishtedaar, numbers, folders) =====
+create table if not exists agent_notes (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid not null,
+  key text not null,
+  value jsonb not null,
+  created_at timestamptz default now()
+);
+alter table agent_notes enable row level security;
+drop policy if exists agent_notes_owner on agent_notes;
+create policy agent_notes_owner on agent_notes for all using (auth.uid() = user_id) with check (auth.uid() = user_id);
