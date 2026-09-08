@@ -16,6 +16,7 @@ const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
 const waWeb = require('./wa-web.js');
+const browserCtl = require('./browser.js');
 
 const PORT = 3155;
 const IS_WIN = process.platform === 'win32';
@@ -147,10 +148,14 @@ const TOOLS = [
   { type: 'function', function: { name: 'folder_create', description: 'Naya folder banao', parameters: { type: 'object', properties: { path: { type: 'string' } }, required: ['path'] } } },
   { type: 'function', function: { name: 'open_app', description: 'App, file ya website kholo. Examples: "notepad", "C:\\Program Files\\...\\app.exe", "https://youtube.com", koi bhi file.', parameters: { type: 'object', properties: { target: { type: 'string' } }, required: ['target'] } } },
   { type: 'function', function: { name: 'close_app', description: 'App band karo (process kill). Process name do, e.g. "notepad", "chrome", "vlc".', parameters: { type: 'object', properties: { process_name: { type: 'string' } }, required: ['process_name'] } } },
-  { type: 'function', function: { name: 'youtube', description: 'YouTube control karo: search, video open, ya YouTube band karo.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['search', 'open', 'close'], description: 'search = YouTube pe search karo (query do), open = video/channel URL kholo (url do), close = YouTube browser tab/app band' }, query: { type: 'string' }, url: { type: 'string' } }, required: ['action'] } } },
+  { type: 'function', function: { name: 'youtube', description: 'YouTube control karo: keyword search karke NTH video play, video open, ya band karo.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['search', 'play_search', 'open', 'close'], description: 'search = results page kholo, play_search = keyword search karke nth (default 3rd) video PLAY karo, open = video/channel URL kholo, close = YouTube browser band' }, query: { type: 'string' }, number: { type: 'number', description: 'kaunsa video play karna hai (1 = first, 3 = third — default 3)' }, url: { type: 'string' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'whatsapp_web', description: "User ka WhatsApp Web kholo/control karo (Chrome window khulti hai, ek BAAR QR scan hota hai, uske baad session yaad rehta hai). Actions: connect (WhatsApp Web kholo), status (connected/login state), disconnect (band karo).", parameters: { type: 'object', properties: { action: { type: 'string', enum: ['connect', 'status', 'disconnect'] } }, required: ['action'] } } },
   { type: 'function', function: { name: 'whatsapp_open_chat', description: "WhatsApp Web mein kisi naam ki chat kholo (search kar ke). e.g. 'Shahzad ki chat kholo' → name='Shahzad'. Pehle whatsapp_web connect hona chahiye.", parameters: { type: 'object', properties: { name: { type: 'string', description: 'jaisa naam WhatsApp mein saved hai' } }, required: ['name'] } } },
   { type: 'function', function: { name: 'whatsapp_delete', description: "WhatsApp Web se TUMHARA bheja hua message DELETE karo. to = kis chat ka (naam, optional — agar nahi do to abhi khuli chat). which = kaunsa message: 1 = last sent (default), 2 = second-last sent... mode = 'everyone' (sab ke liye delete, default) ya 'me' (sirf apne paas se). e.g. 'Shahzad ka last message delete karo' → to='Shahzad', which=1. Note: delete-for-everyne sirf recent messages pe hota hai (purana message nahi hoga).", parameters: { type: 'object', properties: { to: { type: 'string' }, which: { type: 'number', description: '1 = last sent, 2 = second-last sent' }, mode: { type: 'string', enum: ['everyone', 'me'] } }, required: [] } } },
+  { type: 'function', function: { name: 'automation_create', description: "Local AUTOMATION banao (laptop scheduler, laptop time ke hisab se). 'Shahzad ko daily 8 baje good morning message bhejo' → time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!' (text tum khud likho — short + natural). Laptop band raha to laptop khulte hi pending message usi din chala jayega.", parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam (optional)' }, time: { type: 'string', description: 'HH:MM 24h, e.g. 08:00 ya 20:30' }, repeat: { type: 'string', enum: ['daily', 'once'] }, to: { type: 'string', description: 'WhatsApp naam (jaisa WhatsApp mein hai)' }, text: { type: 'string', description: 'jo message bhejna hai' } }, required: ['time', 'to', 'text'] } } },
+  { type: 'function', function: { name: 'automation_list', description: 'Saari saved automations dikhao (last run ke status ke saath)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'automation_delete', description: 'Automation delete karo (id automation_list se milega)', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
+  { type: 'function', function: { name: 'automation_toggle', description: 'Automation ON/OFF karo (bina delete kiye rokna)', parameters: { type: 'object', properties: { id: { type: 'string' }, enabled: { type: 'boolean' } }, required: ['id', 'enabled'] } } },
   { type: 'function', function: { name: 'whatsapp_send', description: "WhatsApp Web se message bhejo (user ke apne number se). text = message. to = naam (agar wo chat khuli nahi hai ya doosre ko bhejna ho). e.g. 'Shahzad ko bolo hi' → to='Shahzad', text='hi'", parameters: { type: 'object', properties: { to: { type: 'string' }, text: { type: 'string' } }, required: ['text'] } } },
   { type: 'function', function: { name: 'system_info', description: 'PC ki info: OS, RAM, disk, current user, IP', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'credential_save', description: 'User ka API token/key/password local vault mein save karo (~/.dev-craft/credentials.json). User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'UPPERCASE naam, e.g. GITHUB_TOKEN, OPENAI_API_KEY' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string' } }, required: ['name', 'value'] } } },
@@ -168,6 +173,7 @@ const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - made by Wishal Noor. Ag
 - run_command (terminal), file_write/file_read/file_list/file_delete/folder_create (file system), open_app/close_app (apps), youtube (search/open/close), system_info.
 - WHATSAPP WEB (user ke apne number se): whatsapp_web {action:"connect"} → Chrome window khulti hai, user ek BAAR QR scan karta hai (uske baad yaad rehta hai). 'Shahzad ki chat kholo' → whatsapp_open_chat {name}. 'Shahzad ko hi bhejo' / 'Tom ko ye message bhejo' → whatsapp_send {to:"Shahzad", text:"hi"}. Status: whatsapp_web {action:"status"}. Disconnect: whatsapp_web {action:"disconnect"}.
 - WHATSAPP DELETE: 'Shahzad ka last message delete karo' / 'mere uncle ko gaya last message wapas delete karo' → whatsapp_delete {to:'Shahzad', which:1, mode:'everyone'} (naam tum khud chat context se lo — dost/client/uncle jo bhi bola). 'second last' → which:2. 'sirf mere paas se' → mode:'me'. User naam na de to khuli chat ka last message. Delete-for-everyone sirf RECENT messages pe hota hai — bahut purana message pe WhatsApp option nahi deta, user ko batao.
+- AUTOMATIONS (laptop scheduler): 'Shahzad ko daily 8 baje good morning bhejo' → automation_create {time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!'} — message text TUM khud likho (short, natural). 'automations dikhao' → automation_list. '8 baje wala band karo' → automation_list se id lo → automation_delete ya automation_toggle {enabled:false}. User ko batao: WhatsApp Web connected hona chahiye, aur laptop band raha to laptop khulte hi pending message usi din chala jayega.
 
 RULES:
 1. User Roman Urdu/Urdu/English mein baat karega - usi language mein jawab do (Roman Urdu mix theek hai).
@@ -200,6 +206,7 @@ async function runTool(name, args, steps) {
     else if (name === 'close_app') { result = await killProcess(args.process_name); title = '🚫 Band kiya: ' + args.process_name; }
     else if (name === 'youtube') {
       if (args.action === 'search') { result = await openTarget('https://www.youtube.com/results?search_query=' + encodeURIComponent(args.query || '')); title = '📺 YouTube search: ' + (args.query || '').slice(0, 40); }
+      else if (args.action === 'play_search') { result = await browserCtl.ytSearchPlay(args.query, args.number); title = '📺 YouTube: ' + (args.query || '').slice(0, 30) + ' ka #' + (args.number || 3) + ' video'; if (result.error) title = '📺 YouTube play fail'; }
       else if (args.action === 'open') { result = await openTarget(args.url || 'https://youtube.com'); title = '📺 YouTube khola'; }
       else { result = await killProcess(IS_WIN ? 'chrome' : 'firefox'); title = '📺 YouTube/browser band'; }
     }
@@ -207,6 +214,32 @@ async function runTool(name, args, steps) {
     else if (name === 'whatsapp_open_chat') { result = await waWeb.openChat(args.name); title = '💬 Chat khola: ' + String(args.name).slice(0, 30); }
     else if (name === 'whatsapp_send') { result = args.to ? await waWeb.sendTo(args.to, args.text) : await waWeb.send(args.text); title = '💬 WhatsApp send' + (args.to ? ' → ' + String(args.to).slice(0, 25) : ''); }
     else if (name === 'whatsapp_delete') { result = await waWeb.deleteMsg(args.to, { which: args.which, mode: args.mode }); title = '🗑 WhatsApp delete' + (args.to ? ' → ' + String(args.to).slice(0, 25) : '') + (result.ok ? ' ✓' : ''); }
+    else if (name === 'automation_create') {
+      const tm = /^(\d{1,2}):(\d{2})$/.exec(String(args.time || '').trim());
+      const to = String(args.to || '').trim(), txt = String(args.text || '').trim();
+      if (!tm) result = { error: 'time HH:MM mein do, e.g. 08:00' };
+      else if (!to || !txt) result = { error: 'to (naam) aur text dono chahiye' };
+      else {
+        const t = tm[1].padStart(2, '0') + ':' + tm[2];
+        const list = autosLoad();
+        const a = { id: 'auto_' + Date.now(), name: args.name || (to + ' @ ' + t), time: t, repeat: args.repeat === 'once' ? 'once' : 'daily', tool: 'whatsapp_send', args: { to: to, text: txt }, enabled: true, created: new Date().toISOString(), last_fired: null, last_ok: null };
+        list.push(a); autosSave(list);
+        result = { ok: true, automation: a, note: 'Har din ' + t + ' laptop time pe chalega. WhatsApp Web connected hona chahiye. Laptop band raha to khulte hi usi din chala jayega.' };
+        title = '⏰ Automation banayi: ' + a.name;
+      }
+    }
+    else if (name === 'automation_list') { const l = autosLoad(); result = { automations: l, total: l.length }; title = '⏰ Automations: ' + l.length; }
+    else if (name === 'automation_delete') {
+      const l = autosLoad(); const before = l.length;
+      const nl = l.filter(a => a.id !== args.id);
+      if (nl.length === before) result = { error: 'id nahi mila — automation_list se sahi id lo' };
+      else { autosSave(nl); result = { ok: true, deleted: args.id }; title = '⏰ Automation delete hui'; }
+    }
+    else if (name === 'automation_toggle') {
+      const l = autosLoad(); const a = l.find(x => x.id === args.id);
+      if (!a) result = { error: 'id nahi mila — automation_list se sahi id lo' };
+      else { a.enabled = !!args.enabled; autosSave(l); result = { ok: true, id: a.id, enabled: a.enabled }; title = '⏰ Automation ' + (a.enabled ? 'ON' : 'OFF'); }
+    }
     else if (name === 'connect_ai_brain') {
     const prov = String(args.provider || '').toLowerCase().trim();
     const key = String(args.api_key || '').trim();
@@ -528,6 +561,42 @@ async function selfTest() {
 }
 if (process.argv.includes('--test')) { selfTest(); return; }
 
+// ---------- LOCAL AUTOMATIONS (laptop scheduler) ----------
+const AUTOS_PATH = path.join(os.homedir(), '.dev-craft', 'automations.json');
+function autosLoad() { try { return JSON.parse(fs.readFileSync(AUTOS_PATH, 'utf8')); } catch (e) { return []; } }
+function autosSave(list) { fs.mkdirSync(path.dirname(AUTOS_PATH), { recursive: true }); fs.writeFileSync(AUTOS_PATH, JSON.stringify(list, null, 2)); }
+async function autoFire(a) {
+  const steps = [];
+  try { return await runTool(a.tool || 'whatsapp_send', a.args || {}, steps); }
+  catch (e) { return JSON.stringify({ error: String(e.message || e) }); }
+}
+async function autosCheck() {
+  const list = autosLoad();
+  const now = new Date();
+  const today = now.toISOString().slice(0, 10);
+  const mins = now.getHours() * 60 + now.getMinutes();
+  let changed = false;
+  for (const a of list) {
+    if (a.enabled === false) continue;
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(a.time || '')); if (!m) continue;
+    const target = parseInt(m[1], 10) * 60 + parseInt(m[2], 10);
+    if (mins >= target && a.last_fired !== today) {
+      const out = await autoFire(a);
+      a.attempts = (a.attempts || 0) + 1;
+      let ok = true; try { const r = JSON.parse(out); ok = !r.error; } catch (e) {}
+      if (ok || a.attempts >= 6) {
+        a.last_fired = today; a.last_run = new Date().toISOString(); a.last_ok = ok; a.attempts = 0;
+        if ((a.repeat || 'daily') === 'once') a.enabled = false;
+      }
+      changed = true;
+      console.log('⏰ Automation ' + (ok ? 'SENT' : 'FAIL') + ': ' + (a.name || a.id) + (ok ? '' : ' → ' + out.slice(0, 100)));
+    }
+  }
+  if (changed) autosSave(list);
+}
+setInterval(() => { autosCheck().catch(() => {}); }, 30000);
+autosCheck().catch(() => {}); // startup catch-up — laptop late khula to pending message abhi chala jayega
+
 http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
   if (req.method === 'GET' && req.url === '/api/credentials') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(vaultList())); }
@@ -588,7 +657,7 @@ http.createServer((req, res) => {
   console.log('\n⚡ DEV CRAFT AGENT - DESKTOP v1');
   console.log('   ➜ Browser mein kholo: http://localhost:' + PORT);
   console.log('   ' + (IS_WIN ? 'OS: Windows' : IS_MAC ? 'OS: macOS' : 'OS: Linux') + ' | User: ' + os.userInfo().username);
-  console.log('\n   Powers: terminal ✅ files/folders edit+delete ✅ apps open/close ✅ YouTube ✅');
+  console.log('\n   Powers: terminal ✅ files ✅ apps ✅ YouTube nth-video ✅ WhatsApp Web ✅ Automations ⏰');
   console.log('   AI: Settings mein OpenAI key ya local Ollama (free)\n');
   try { await openTarget('http://localhost:' + PORT); console.log('   Browser khul gaya! (na khula to manually kholo)'); } catch (e) {}
 });
