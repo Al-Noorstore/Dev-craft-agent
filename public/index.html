@@ -225,6 +225,24 @@
     .msg-row { max-width: 90%; }
     #chat { padding: 12px; }
     .welcome h2 { font-size: 19px; }
+    /* ==== MOBILE UI ==== */
+    #topbar { padding: 10px; padding-top: max(10px, env(safe-area-inset-top)); gap: 6px; }
+    #topbar h1 { font-size: 15px; }
+    .icon-btn { width: 38px; height: 38px; }
+    .input-area { padding: 10px; padding-bottom: max(10px, env(safe-area-inset-bottom)); }
+    .msg { font-size: 14px; padding: 10px 13px; }
+    .quick { grid-template-columns: 1fr 1fr; }
+    .quick button { font-size: 12px; padding: 11px 9px; }
+    #termWrap { padding: 10px; padding-top: max(10px, env(safe-area-inset-top)); }
+    #termHead { flex-wrap: wrap; }
+    #termOut { padding: 10px; font-size: 12.5px; }
+    #termIn { font-size: 13px; padding: 11px 12px; min-width: 0; }
+    #termRow button { padding: 11px 14px; }
+    .cmd-block { font-size: 11.5px; padding: 10px; }
+    .cmd-block .cpy { padding: 5px 12px; font-size: 12px; }
+    .set-box { padding: 16px 14px; max-height: 88vh; }
+    .login-card { padding: 22px 18px 18px; }
+    .pairing-code { font-size: 22px; letter-spacing: 3px; }
   }
   @media (min-width: 769px) { .welcome { max-width: 480px; } }
 </style>
@@ -1398,8 +1416,14 @@
     var isIOS = /iPhone|iPad/i.test(navigator.userAgent);
     if (isIOS) { termOut('❌ iPhone/iPad pe device terminal possible nahi (Apple apps ko shell access nahi deta). Laptop pe Desktop app use karo.', 'err'); return; }
     if (isAndroid) {
-      termOut('📱 <b>Apne PHONE pe commands chalao — Termux ki tarah</b>\nBrowser phone ka terminal nahi bana sakta (OS rule), lekin 2 minute ka setup:\n\n<b>STEP 1:</b> Play Store/F-Droid se <b>Termux</b> AUR <b>Termux:API</b> dono install karo (API wala calls/SMS/battery sab ke liye)\n<b>STEP 2:</b> Termux kholo, ye chalao:\n  pkg install nodejs termux-api -y\n  termux-setup-storage   (files ke liye - permission allow karo)\n<b>STEP 3:</b> Agent download karo:\n  curl -o mobile-agent.js https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/0dac85824_mobile-agent.js\n<b>STEP 4:</b> Neeche "📱 Pairing code lo" dabao, phir Termux mein:\n  node mobile-agent.js <CODE>\n\nBas! Ab is Terminal mein jo likhoge wo PHONE pe chalega (phone ki power).', 'sys');
-      termOut('<button onclick="termGetCode()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:13px;cursor:pointer">📱 Pairing code lo</button> <span id="termCodeBox" style="margin-left:10px;color:#60a5fa;font-weight:600"></span>', 'sys');
+      termOut('📱 <b>Apne PHONE pe commands chalao — Termux ki tarah</b>\nBrowser phone ka terminal nahi bana sakta (OS rule), lekin 2 minute ka setup.\n\nHar command ke saath <b>Copy</b> button hai — dabao, Termux mein <b>paste</b> karo (long-press → Paste).\n\n<b>STEP 1:</b> Play Store/F-Droid se <b>Termux</b> AUR <b>Termux:API</b> dono install karo (API wala calls/SMS/battery sab ke liye)\n\n<b>STEP 2:</b> Termux kholo — ye dono commands chalao:', 'sys');
+      termOut('<div class="cmd-block" onclick="copyCmd(this)"><span>pkg install nodejs termux-api -y</span><span class="cpy">Copy</span></div><div class="cmd-block" onclick="copyCmd(this)"><span>termux-setup-storage</span><span class="cpy">Copy</span></div>', null);
+      termOut('<b>STEP 3:</b> Agent download karo:', 'sys');
+      termOut('<div class="cmd-block" onclick="copyCmd(this)"><span>curl -sL -o mobile-agent.js https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/0dac85824_mobile-agent.js</span><span class="cpy">Copy</span></div>', null);
+      termOut('<b>STEP 4:</b> Neeche "📱 Pairing code lo" dabao — code khud is command mein lag jayega:', 'sys');
+      termOut('<div class="cmd-block" onclick="copyCmd(this)"><span>node mobile-agent.js &lt;CODE&gt;</span><span class="cpy">Copy</span></div>', null);
+      termOut('Bas! Ab is Terminal mein jo likhoge wo PHONE pe chalega (phone ki power).', 'sys');
+      termOut('<button onclick="termGetCode()" style="background:#2563eb;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:14px;cursor:pointer">📱 Pairing code lo</button> <span id="termCodeBox" style="margin-left:10px;color:#60a5fa;font-weight:600"></span>', 'sys');
     } else {
       termOut('💻 <b>Koi connected laptop/PC nahi mila.</b>\n• Laptop pe Dev Craft Agent (Desktop) kholo — usi laptop pe ho to DIRECT connect ho jayega\n• Ya "Connect PC" page se pair karo\n• Phone se: Android pe Termux setup (Termux app → node mobile-agent.js <CODE>)', 'sys');
     }
@@ -1410,8 +1434,11 @@
       var d = await r.json();
       if (r.status === 401) { alert('Pehle Sign in karo (sidebar)'); return; }
       if (!d.success) { alert('Error: ' + (d.error || 'pairing fail')); return; }
-      document.getElementById('termCodeBox').innerHTML = 'CODE: <b style="font-size:16px">' + d.code + '</b> — Termux mein: node mobile-agent.js ' + d.code;
-      termOut('✅ Code mila: <b>' + d.code + '</b> — Termux mein ye chalao:\n  node mobile-agent.js ' + d.code + '\n(chalne ke baad yahan koi bhi command likho — phone pe chalegi)', 'sys');
+      pairedCode = d.code;
+      document.getElementById('termCodeBox').innerHTML = '✅ CODE: <b style="font-size:16px">' + d.code + '</b>';
+      termOut('✅ Code mila: <b>' + d.code + '</b> — Termux mein YE chalao (tap = copy):', 'sys');
+      termOut('<div class="cmd-block" onclick="copyCmd(this)"><span>node mobile-agent.js ' + d.code + '</span><span class="cpy">Copy</span></div>', null);
+      termOut('(chalne ke baad yahan koi bhi command likho — phone pe chalegi)', 'sys');
     } catch (e) { alert('Network error: ' + e.message); }
   }
   async function termRun(cmd) {
