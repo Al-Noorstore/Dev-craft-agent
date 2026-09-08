@@ -47,6 +47,32 @@ module.exports = async (req, res) => {
       return res.json({ success: true, code, device_id: rows[0].id, message: 'Apne PC pe ye command chalao: node bridge.js ' + code });
     }
 
+    // ---- EXEC: website/agent device pe shell command ka job banata hai ----
+    if (action === 'exec') {
+      const { device_id, command } = body;
+      if (!device_id || !command) return res.status(400).json({ error: 'device_id + command required' });
+      const insRes = await fetch(SB_URL + '/rest/v1/bridge_jobs', {
+        method: 'POST', headers,
+        body: JSON.stringify({ device_id, type: 'shell', payload: { command: String(command).slice(0, 2000) }, status: 'pending' })
+      });
+      if (!insRes.ok) return res.status(500).json({ error: 'Job insert failed: ' + (await insRes.text()).slice(0, 120) });
+      const rows = await insRes.json();
+      return res.json({ success: true, job_id: rows[0].id });
+    }
+
+    // ---- RUN_TOOL: website/agent desktop ke kisi tool (whatsapp/youtube/files) se kaam karwata hai ----
+    if (action === 'run_tool') {
+      const { device_id, tool, args } = body;
+      if (!device_id || !tool) return res.status(400).json({ error: 'device_id + tool required' });
+      const insRes = await fetch(SB_URL + '/rest/v1/bridge_jobs', {
+        method: 'POST', headers,
+        body: JSON.stringify({ device_id, type: 'tool', payload: { tool: String(tool).slice(0, 60), args: args || {} }, status: 'pending' })
+      });
+      if (!insRes.ok) return res.status(500).json({ error: 'Job insert failed: ' + (await insRes.text()).slice(0, 120) });
+      const rows = await insRes.json();
+      return res.json({ success: true, job_id: rows[0].id });
+    }
+
     // ---- REGISTER: bridge script PC se call karta hai ----
     if (action === 'register') {
       const { code, device_name, os, ollama_models } = body;

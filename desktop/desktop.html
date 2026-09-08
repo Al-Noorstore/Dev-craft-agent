@@ -130,6 +130,14 @@
         <div class="set-hint">Models list automatically aati hai. Install: ollama.com → "ollama pull llama3.2"</div>
       </div>
       <div class="set-actions">
+        <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:10px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:6px">🌉 Cloud Bridge</div>
+          <div id="bridgeState" style="font-size:12px;color:#6b7280;margin-bottom:8px">Checking…</div>
+          <div id="bridgePairRow" style="display:flex;gap:6px;align-items:center">
+            <input id="bridgeCode" placeholder="Pairing code (website → Connect PC)" style="flex:1;padding:7px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px">
+            <button class="btn save" style="padding:7px 12px;font-size:13px" onclick="bridgePairNow()">Connect</button>
+          </div>
+        </div>
         <button class="btn ghost" onclick="closeSettings()">Cancel</button>
         <button class="btn save" onclick="saveSettings()">Save</button>
       </div>
@@ -206,7 +214,7 @@
     if (!confirm(name + ' hatao?')) return;
     await mcpApi('delete', { name }); loadMcp();
   }
-  function openSettings() {
+  function openSettings() { bridgeState();
     document.getElementById('settingsModal').classList.add('open');
     setProvider(settings.provider);
     document.getElementById('setApiKey').value = settings.api_key || '';
@@ -297,6 +305,34 @@
   function quick(t) { input.value = t; send(); }
   input.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
   input.addEventListener('input', () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 120) + 'px'; });
+  // ---- Cloud Bridge ----
+  async function bridgeState() {
+    const el = document.getElementById('bridgeState'); if (!el) return;
+    try {
+      const r = await fetch('/api/bridge/status'); const d = await r.json();
+      if (d.paired) {
+        el.innerHTML = '✅ Connected: <b>' + (d.device_name || 'device') + '</b> — website/mobile ke Terminal se ye laptop control ho sakta hai. <button class="btn" style="font-size:12px;padding:4px 10px" onclick="bridgeOff()">Disconnect</button>';
+        document.getElementById('bridgePairRow').style.display = 'none';
+      } else {
+        el.textContent = 'Not connected — dev-craft-agent.vercel.app kholo → Connect PC → Get pairing code → code yahan paste karo.';
+        document.getElementById('bridgePairRow').style.display = 'flex';
+      }
+    } catch (e) { el.textContent = 'Status nahi mila: ' + e.message; }
+  }
+  async function bridgePairNow() {
+    const code = document.getElementById('bridgeCode').value.trim();
+    if (!code) return alert('Code paste karo pehle');
+    try {
+      const r = await fetch('/api/bridge/pair', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code }) });
+      const d = await r.json();
+      if (d.ok) { alert('✅ Cloud Bridge connected! Ab website / mobile ke Terminal se ye laptop ka terminal chal sakta hai.'); bridgeState(); }
+      else alert('❌ ' + (d.error || 'Pair fail'));
+    } catch (e) { alert('Network error: ' + e.message); }
+  }
+  async function bridgeOff() {
+    try { await fetch('/api/bridge/disconnect', { method: 'POST' }); } catch (e) {}
+    bridgeState();
+  }
 </script>
 </body>
 </html>

@@ -580,6 +580,56 @@ async function selfTest() {
 }
 if (process.argv.includes('--test')) { selfTest(); return; }
 
+// ---------- CLOUD BRIDGE (cloud website / mobile se ye laptop control) ----------
+const BRIDGE_API = 'https://dev-craft-agent.vercel.app/api/bridge';
+const BRIDGE_FILE = path.join(os.homedir(), '.dev-craft', 'bridge.json');
+function bridgeLoad() { try { return JSON.parse(fs.readFileSync(BRIDGE_FILE, 'utf8')); } catch (e) { return null; } }
+function bridgeSave(o) { fs.mkdirSync(path.dirname(BRIDGE_FILE), { recursive: true }); fs.writeFileSync(BRIDGE_FILE, JSON.stringify(o, null, 2)); }
+function bridgeStatus() { const b = bridgeLoad(); return { paired: !!(b && b.device_id), device_id: b ? b.device_id : null, device_name: b ? b.device_name : null }; }
+async function bridgeApi(payload) {
+  const r = await fetch(BRIDGE_API, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+  const d = await r.json();
+  if (!d.success && d.error) throw new Error(d.error);
+  return d;
+}
+async function bridgePair(code) {
+  const c = String(code || '').trim().toUpperCase();
+  if (!c) throw new Error('Pairing code paste karo (website > Connect PC > Get pairing code)');
+  const d = await bridgeApi({ action: 'register', code: c, device_name: os.hostname(), os: os.type() + ' ' + os.release() });
+  bridgeSave({ device_id: d.device_id, device_name: d.device_name || os.hostname(), paired_at: new Date().toISOString() });
+  bridgeStart();
+  return d;
+}
+async function bridgeOff() {
+  const b = bridgeLoad();
+  if (b && b.device_id) { try { await bridgeApi({ action: 'disconnect', device_id: b.device_id }); } catch (e) {} }
+  try { fs.unlinkSync(BRIDGE_FILE); } catch (e) {}
+  if (bridgeTimer) { clearInterval(bridgeTimer); bridgeTimer = null; }
+}
+let bridgeTimer = null;
+async function bridgeTick() {
+  const b = bridgeLoad();
+  if (!b || !b.device_id) return;
+  try {
+    const d = await bridgeApi({ action: 'poll', device_id: b.device_id });
+    for (const job of (d.jobs || [])) {
+      (async () => {
+        let result = {}, st = 'done';
+        try {
+          const steps = [];
+          if (job.type === 'shell') result = JSON.parse(await runTool('run_command', { command: (job.payload && job.payload.command) || 'echo no command', timeout: 120 }, steps));
+          else if (job.type === 'tool') result = JSON.parse(await runTool((job.payload && job.payload.tool) || '', (job.payload && job.payload.args) || {}, steps));
+          else { result = { error: 'Unknown job type: ' + job.type }; st = 'error'; }
+          if (result.error) st = 'error';
+        } catch (e) { result = { error: String(e.message || e) }; st = 'error'; }
+        try { await bridgeApi({ action: 'result', job_id: job.id, status: st, result }); } catch (e) {}
+        console.log('🌉 Cloud job ' + (st === 'done' ? 'DONE' : 'FAIL') + ': ' + job.type + ' — ' + String((job.payload && (job.payload.command || job.payload.tool)) || '').slice(0, 60));
+      })();
+    }
+  } catch (e) { /* cloud offline / net down — chup rehkar agla poll try karo */ }
+}
+function bridgeStart() { if (bridgeTimer) return; bridgeTimer = setInterval(() => { bridgeTick().catch(() => {}); }, 4000); bridgeTick().catch(() => {}); }
+
 // ---------- LOCAL AUTOMATIONS (laptop scheduler) ----------
 const AUTOS_PATH = path.join(os.homedir(), '.dev-craft', 'automations.json');
 function autosLoad() { try { return JSON.parse(fs.readFileSync(AUTOS_PATH, 'utf8')); } catch (e) { return []; } }
@@ -617,8 +667,14 @@ setInterval(() => { autosCheck().catch(() => {}); }, 30000);
 autosCheck().catch(() => {}); // startup catch-up — laptop late khula to pending message abhi chala jayega
 
 http.createServer((req, res) => {
+  // CORS — cloud website (same laptop browser) se direct terminal ke liye
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); }
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
   if (req.method === 'GET' && req.url === '/api/credentials') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(vaultList())); }
+  if (req.method === 'GET' && req.url === '/api/bridge/status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(bridgeStatus())); }
   if (req.method === 'POST') {
     let buf = '';
     req.on('data', c => buf += c);
@@ -630,6 +686,14 @@ http.createServer((req, res) => {
         catch (e) { return res.end(JSON.stringify({ models: [] })); }
       }
       if (req.url === '/api/ping') return res.end(JSON.stringify({ ok: true, app: 'Dev Craft Desktop v1', os: os.type() }));
+      if (req.url === '/api/exec') {
+        try {
+          const out = JSON.parse(await runTool('run_command', { command: vaultExpand(body.command || 'echo no command'), timeout: Math.min(120, body.timeout || 60) }, []));
+          return res.end(JSON.stringify({ ok: !out.error, output: out.output || out.error || '', exit: out.exit != null ? out.exit : (out.error ? 1 : 0) }));
+        } catch (e) { return res.end(JSON.stringify({ ok: false, output: String(e.message || e), exit: 1 })); }
+      }
+      if (req.url === '/api/bridge/pair') { try { const d = await bridgePair(body.code || ''); return res.end(JSON.stringify({ ok: true, device_id: d.device_id })); } catch (e) { return res.end(JSON.stringify({ ok: false, error: String(e.message || e) })); } }
+      if (req.url === '/api/bridge/disconnect') { await bridgeOff(); return res.end(JSON.stringify({ ok: true })); }
       if (req.url === '/api/mcp') {
         res.setHeader('Content-Type', 'application/json');
         const b = body || {};
@@ -677,6 +741,8 @@ http.createServer((req, res) => {
   console.log('   ➜ Browser mein kholo: http://localhost:' + PORT);
   console.log('   ' + (IS_WIN ? 'OS: Windows' : IS_MAC ? 'OS: macOS' : 'OS: Linux') + ' | User: ' + os.userInfo().username);
   console.log('\n   Powers: terminal ✅ files ✅ apps ✅ YouTube ✅ Chrome ✅ WhatsApp Web ✅ Automations ⏰ + system_check 🔍');
+  if (bridgeStatus().paired) { bridgeStart(); console.log('   🌉 Cloud Bridge: CONNECTED (website/mobile se ye laptop control ho sakta hai)'); }
+  else console.log('   🌉 Cloud Bridge: OFF (Settings → Cloud Bridge se pair karo)');
   console.log('   AI: Settings mein OpenAI key ya local Ollama (free)\n');
   try { await openTarget('http://localhost:' + PORT); console.log('   Browser khul gaya! (na khula to manually kholo)'); } catch (e) {}
 });

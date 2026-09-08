@@ -34,6 +34,14 @@
   #sidebar.open { opacity: 1; transform: translateY(0) scale(1); pointer-events: auto; }
   .menu-item { display: flex; align-items: center; gap: 10px; padding: 12px 16px; color: var(--text); font-size: 14px; cursor: pointer; border-bottom: 1px solid var(--border); }
   .menu-item:hover { background: var(--bg); }
+  #termWrap { position: fixed; inset: 0; z-index: 100; background: rgba(15,18,24,0.97); display: none; flex-direction: column; padding: 14px; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #termHead { display: flex; align-items: center; gap: 10px; color: #9ca3af; font-size: 12px; padding-bottom: 8px; }
+  #termStatus { color: #9ca3af; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #termOut { flex: 1; overflow-y: auto; background: #0b0e13; border: 1px solid #1f2937; border-radius: 10px; padding: 12px; color: #d1d5db; font-size: 13px; line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+  #termOut .cmd { color: #60a5fa; } #termOut .err { color: #f87171; } #termOut .sys { color: #6b7280; }
+  #termRow { display: flex; gap: 8px; margin-top: 10px; }
+  #termIn { flex: 1; background: #0b0e13; border: 1px solid #1f2937; border-radius: 10px; padding: 12px 14px; color: #e5e7eb; font-family: inherit; font-size: 13px; outline: none; }
+  #termIn:focus { border-color: #3b82f6; }
   .menu-item .ic { width: 18px; display: flex; align-items: center; justify-content: center; color: var(--text-muted); }
   #newChat { margin: 10px 12px; padding: 11px; border: none; border-radius: 12px; background: var(--primary); color: white; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; }
   #newChat:hover { background: var(--primary-dark); }
@@ -232,6 +240,7 @@
     </div>
     <div class="menu-item" onclick="clearCurrent()"><span class="ic">🗑</span> Clear this chat</div>
     <div class="menu-item" onclick="showConnect()"><span class="ic">💻</span> Connect PC <span id="pcDot" style="margin-left:auto;width:9px;height:9px;border-radius:50%;background:#d1d5db"></span></div>
+    <div class="menu-item" onclick="showTerminal()"><span class="ic">⌨️</span> Terminal</div>
     <div class="menu-item" onclick="showMcp()"><span class="ic">🔌</span> Connect MCP</div>
     <div class="menu-item" onclick="showDownload()"><span class="ic">⬇️</span> Download App</div>
     <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
@@ -872,7 +881,8 @@
         }).join('') +
       '</div>' +
       '<div style="margin-top:14px"><button class="primary-btn" onclick="startPair()">' + (pairedCode && pairDeviceId ? 'Naya pairing code lo' : 'Get pairing code') + '</button></div>' +
-      '<p class="sub" style="margin-top:12px">💡 Connect hone ke baad: Settings (⚙️) mein Ollama models real-time dikhenge, aur agent tumhare PC pe commands chala sakta hai.</p>' +
+      '<p class="sub" style="margin-top:12px">💡 Connect hone ke baad: agent tumhare PC pe commands chala sakta hai, aur <b>⌨️ Terminal</b> page se real terminal chalega.</p>' +
+      '<p class="sub" style="margin-top:8px">📲 <b>DESKTOP APP walo ke liye:</b> bridge.js ki zaroorat NAHI — Desktop app kholo → Settings → 🌉 Cloud Bridge → upar wala code paste karo. Bas!</p>' +
     '</div>';
     renderConnectStatus();
     startPCPolling();
@@ -1335,6 +1345,103 @@
   // ====== INIT ======
   if (!conversations.length) newChat();
   else { if (!current()) currentId = conversations[0].id; renderSidebar(); renderChat(); }
+</script>
+<!-- ================= TERMINAL ================= -->
+<div id="termWrap">
+  <div id="termHead">
+    <span style="font-weight:600;color:#e5e7eb">⌨️ DevCraft Terminal</span>
+    <span id="termStatus">Checking…</span>
+    <button onclick="hideTerminal()" style="background:none;border:1px solid #374151;color:#9ca3af;border-radius:8px;padding:4px 10px;font-size:12px;cursor:pointer">✕ Close</button>
+  </div>
+  <div id="termOut"></div>
+  <div id="termRow">
+    <input id="termIn" placeholder="type command (e.g. dir / ls / echo hello / python --version)" autocomplete="off" spellcheck="false">
+  </div>
+</div>
+<script>
+  var termMode = 'detecting', termDev = null, termHist = [], termHi = -1;
+  function esc(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function termOut(html, cls) { var o = document.getElementById('termOut'); var d = document.createElement('div'); if (cls) d.className = cls; d.innerHTML = html; o.appendChild(d); o.scrollTop = o.scrollHeight; }
+  function showTerminal() { toggleSidebar(false); document.getElementById('termWrap').style.display = 'flex'; document.getElementById('termOut').innerHTML = ''; termOut('DevCraft Terminal — asli commands tumhare laptop pe chalti hain (mobile/browser sirf remote hai).\n"help" likho examples ke liye.', 'sys'); termDetect(); setTimeout(function () { document.getElementById('termIn').focus(); }, 100); }
+  function hideTerminal() { document.getElementById('termWrap').style.display = 'none'; }
+  async function termDetect() {
+    termMode = 'detecting'; termDev = null;
+    document.getElementById('termStatus').textContent = 'Detecting device…';
+    // 1) wahi laptop pe desktop app chal raha hai? → direct (sabse fast)
+    try {
+      var c = new AbortController(); var t = setTimeout(function () { c.abort(); }, 1500);
+      var r = await fetch('http://localhost:3155/api/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: 'echo ok', timeout: 5 }), signal: c.signal });
+      clearTimeout(t);
+      var d = await r.json();
+      if (d && d.ok) { termMode = 'local'; document.getElementById('termStatus').innerHTML = '<span style="color:#22c55e">● DIRECT — laptop agent (localhost:3155)</span>'; return; }
+    } catch (e) {}
+    // 2) cloud bridge device online? → commands us laptop pe chalenge
+    try {
+      var r2 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'devices' }) });
+      var d2 = await r2.json();
+      var dev = (d2.devices || []).find(function (x) { return x.online; });
+      if (dev) { termMode = 'cloud'; termDev = dev.id; document.getElementById('termStatus').innerHTML = '<span style="color:#22c55e">● CLOUD BRIDGE — ' + esc(dev.device_name || 'PC') + ' (commands is laptop pe chalenge)</span>'; return; }
+    } catch (e) {}
+    termMode = 'none';
+    document.getElementById('termStatus').innerHTML = '<span style="color:#ef4444">● OFFLINE — koi device online nahi</span>';
+    termOut('❌ Koi connected laptop nahi mila.\n• Laptop pe Dev Craft Agent (Desktop) kholo — agar usi laptop pe ho to direct connect ho jayega\n• Ya Connect PC (💻) se pair karo\n(Phone ka apna terminal browser se nahi chal sakta — OS restriction hai, isliye ye tumhare laptop ki power use karta hai)', 'err');
+  }
+  async function termRun(cmd) {
+    if (!cmd) return;
+    termOut('<span class="cmd">' + esc(cmd) + '</span>', null);
+    if (termMode === 'local') {
+      try {
+        var r = await fetch('http://localhost:3155/api/exec', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: cmd, timeout: 120 }) });
+        var d = await r.json();
+        termOut(esc(d.output || '(no output)'), d.ok ? null : 'err');
+      } catch (e) { termOut('❌ Desktop app se baat nahi bani — kholo hai? ' + esc(e.message), 'err'); termDetect(); }
+    } else if (termMode === 'cloud') {
+      termOut('→ command laptop ko bheja, result ka wait…', 'sys');
+      try {
+        var r2 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'exec', device_id: termDev, command: cmd }) });
+        var d2 = await r2.json();
+        if (!d2.success) { termOut('❌ ' + esc(d2.error || 'job fail'), 'err'); return; }
+        var jobId = d2.job_id;
+        for (var i = 0; i < 90; i++) {
+          await new Promise(function (res) { setTimeout(res, 1000); });
+          var r3 = await fetch('/api/bridge', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'job_status', job_id: jobId }) });
+          var d3 = await r3.json();
+          var job = d3.job;
+          if (job && (job.status === 'done' || job.status === 'error')) {
+            var out = job.result && (job.result.output || job.result.error);
+            termOut(esc(out || '(no output)'), job.status === 'done' ? null : 'err');
+            return;
+          }
+        }
+        termOut('⏱️ Timeout — laptop agent se 90s mein jawab nahi aaya (laptop on hai?)', 'err');
+      } catch (e) { termOut('❌ ' + esc(e.message), 'err'); termDetect(); }
+    } else {
+      termOut('Device offline — pehle Connect PC ya Desktop app kholo.', 'err');
+      termDetect();
+    }
+  }
+  document.addEventListener('keydown', function (e) {
+    var w = document.getElementById('termWrap');
+    if (!w || w.style.display === 'none') return;
+    if (e.key === 'Escape') { hideTerminal(); return; }
+  });
+  (function () {
+    var inp = document.getElementById('termIn');
+    inp.addEventListener('keydown', async function (e) {
+      if (e.key === 'Enter') {
+        var v = inp.value.trim(); inp.value = '';
+        if (!v) return;
+        if (v === 'clear') { document.getElementById('termOut').innerHTML = ''; return; }
+        if (v === 'help') { termOut('Examples:\n  ls / dir — files dekho\n  echo hello\n  python --version\n  ipconfig / ifconfig — network\n  clear — screen saaf\nStatus bar batata hai commands kahan chal rahi hain (laptop).', 'sys'); return; }
+        termHist.push(v); termHi = termHist.length;
+        await termRun(v);
+      } else if (e.key === 'ArrowUp') {
+        if (termHist.length) { termHi = Math.max(0, termHi - 1); inp.value = termHist[termHi]; e.preventDefault(); }
+      } else if (e.key === 'ArrowDown') {
+        if (termHist.length) { termHi = Math.min(termHist.length, termHi + 1); inp.value = termHist[termHi] || ''; e.preventDefault(); }
+      }
+    });
+  })();
 </script>
 </body>
 </html>
