@@ -269,11 +269,12 @@ async function notesApi(uid, op, data) {
       return { saved: true, key: data.key };
     }
     if (op === 'search') {
-      const q = encodeURIComponent('%' + String(data.q || '').slice(0, 100) + '%');
-      const r = await fetch(SB_URL + '/rest/v1/agent_notes?user_id=eq.' + encodeURIComponent(uid) + '&or=(key.ilike.' + q + ',value::text.ilike.' + q + ')&select=*&order=created_at.desc&limit=20', { headers: H });
+      const q = String(data.q || '').toLowerCase().slice(0, 100);
+      const r = await fetch(SB_URL + '/rest/v1/agent_notes?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=created_at.desc&limit=200', { headers: H });
       if (!r.ok) return { notes: [], error: 'search fail' };
       const rows = await r.json();
-      return { notes: rows.map(x => ({ key: x.key, value: x.value })) };
+      const hits = rows.filter(x => !q || (x.key + ' ' + JSON.stringify(x.value)).toLowerCase().includes(q));
+      return { notes: hits.slice(0, 20).map(x => ({ key: x.key, value: x.value })) };
     }
     if (op === 'delete') {
       const q = encodeURIComponent('%' + String(data.q || '').slice(0, 100) + '%');
