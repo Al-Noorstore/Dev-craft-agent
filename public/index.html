@@ -51,6 +51,11 @@
   #acctPopEmailRow { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 12px; color: var(--text); border-radius: 8px; word-break: break-all; }
   #acctPopOut { display: flex; align-items: center; gap: 8px; padding: 9px 10px; font-size: 13px; color: #e11d48; cursor: pointer; border-radius: 8px; font-weight: 600; }
   #acctPopOut:hover { background: rgba(225,29,72,.08); }
+  #voiceLangMenu { display: none; position: absolute; bottom: calc(100% + 8px); right: 0; min-width: 210px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 10px 30px rgba(17,24,39,.18); padding: 6px; z-index: 85; }
+  #voiceLangMenu.open { display: block; }
+  .vl-opt { padding: 9px 10px; font-size: 13px; color: var(--text-muted); border-radius: 8px; cursor: pointer; white-space: nowrap; }
+  .vl-opt:hover { background: var(--bg); }
+  .vl-opt.sel { color: var(--primary); font-weight: 700; }
   .conv-item { display: flex; align-items: center; padding: 10px 10px; border-radius: 10px; color: var(--text-muted); font-size: 13px; cursor: pointer; margin-bottom: 2px; white-space: nowrap; overflow: hidden; }
   .conv-item:hover { background: var(--bg); }
   .conv-item.active { background: #e8f6ef; color: var(--primary-dark); font-weight: 600; }
@@ -331,6 +336,10 @@
       <button id="mic" class="round-btn" onclick="toggleMic()" title="Bol kar poocho" aria-label="Voice input">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z" stroke="currentColor" stroke-width="1.8"/><path d="M19 11a7 7 0 0 1-14 0M12 19v3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
+      <div style="position:relative">
+        <button id="voiceLangBtn" class="round-btn" onclick="toggleVoiceLangMenu(event)" title="Voice language" aria-label="Voice language" style="width:38px;font-size:12.5px;font-weight:700">🌐</button>
+        <div id="voiceLangMenu"></div>
+      </div>
       <button id="send" onclick="sendMsg()" aria-label="Send">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M12 19V5M5 12l7-7 7 7" stroke="white" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
       </button>
@@ -445,9 +454,11 @@
     if (!authUser || !sbClient) return;
     if (lastSyncUid === authUser.id) return;
     lastSyncUid = authUser.id;
+    const _act = chatActivity;
     try {
       const { data, error } = await sbClient.from('chats').select('conversations,current_id').eq('user_id', authUser.id).maybeSingle();
       if (error) throw error;
+      if (chatActivity !== _act) return; // sync ke dauran user ne msg bheja — server copy se local overwrite NA karo
       if (data && Array.isArray(data.conversations) && data.conversations.length) {
         // LOGIN: apne chats wapas mil gaye (dosre device ya dobara login)
         conversations = data.conversations;
@@ -628,9 +639,11 @@
 
   function clearCurrent() { toggleChatInput(true); if (current()) { current().messages = []; current().title = 'New Chat'; save(); renderSidebar(); renderChat(); } toggleSidebar(false); }
 
+  let chatActivity = 0; // sync-race guard: kitne messages send hue
   async function sendMsg() {
     const text = input.value.trim();
     if (!text || busy) return;
+    chatActivity++;
     // LOGGED-OUT: prompt hold + login card — login ke baad khud send hoga
     if (!authUser) { try { await (authReadyPromise || Promise.resolve()); } catch (e) {} }
     if (!authUser && sbClient) { loginToProceed(text); return; }
@@ -696,17 +709,67 @@
   let recognition = null;
   if (SR) {
     recognition = new SR();
-    recognition.lang = 'en-US'; recognition.interimResults = false;
+    recognition.interimResults = false;
     recognition.onresult = e => { input.value = e.results[0][0].transcript; sendMsg(); };
     recognition.onend = () => { listening = false; document.getElementById('mic').classList.remove('listening'); };
+    recognition.onerror = () => { listening = false; document.getElementById('mic').classList.remove('listening'); };
+  }
+  // ====== VOICE LANGUAGES (mic koi bhi language samjhe) ======
+  const VOICE_LANGS = [
+    { code: 'auto', label: '\ud83c\udf10 Auto \u2014 chat ki language detect' },
+    { code: 'en-US', label: 'English' },
+    { code: 'ur-PK', label: '\u0627\u0631\u062f\u0648 \u2014 Urdu' },
+    { code: 'hi-IN', label: '\u0939\u093f\u0928\u094d\u0926\u0940 \u2014 Hindi' },
+    { code: 'ar-SA', label: '\u0627\u0644\u0639\u0631\u0628\u064a\u0629 \u2014 Arabic' },
+    { code: 'pa-IN', label: '\u0a2a\u0a70\u0a1c\u0a3e\u0a2c\u0a40 \u2014 Punjabi' },
+    { code: 'bn-IN', label: '\u09ac\u09be\u0982\u09b2\u09be \u2014 Bengali' },
+    { code: 'fa-IR', label: '\u0641\u0627\u0631\u0633\u06cc \u2014 Persian' },
+  ];
+  function getVoiceLang() { try { return localStorage.getItem('dc_voice_lang') || 'auto'; } catch (e) { return 'auto'; } }
+  function setVoiceLang(code) { try { localStorage.setItem('dc_voice_lang', code); } catch (e) {} renderVoiceLangBtn(); toggleVoiceLangMenu(null, true); }
+  function renderVoiceLangBtn() {
+    const b = document.getElementById('voiceLangBtn');
+    if (!b) return;
+    const code = getVoiceLang();
+    b.textContent = code === 'auto' ? '\ud83c\udf10' : code.split('-')[0].toUpperCase();
+    b.title = 'Voice language: ' + ((VOICE_LANGS.find(l => l.code === code) || VOICE_LANGS[0]).label);
+  }
+  function toggleVoiceLangMenu(ev, forceClose) {
+    if (ev) ev.stopPropagation();
+    const m = document.getElementById('voiceLangMenu');
+    if (!m) return;
+    if (forceClose || m.classList.contains('open')) { m.classList.remove('open'); return; }
+    const cur = getVoiceLang();
+    m.innerHTML = VOICE_LANGS.map(l => '<div class="vl-opt' + (l.code === cur ? ' sel' : '') + '" onclick="setVoiceLang(\'' + l.code + '\')">' + l.label + '</div>').join('');
+    m.classList.add('open');
+  }
+  document.addEventListener('click', (e) => { const m = document.getElementById('voiceLangMenu'); if (m && m.classList.contains('open') && !m.contains(e.target)) m.classList.remove('open'); });
+  // Auto mode: chat ki script dekh kar language chuno
+  function detectVoiceLang() {
+    const sel = getVoiceLang();
+    if (sel !== 'auto') return sel;
+    let sample = input.value || '';
+    if (!sample) {
+      outer: for (let i = conversations.length - 1; i >= 0; i--) {
+        const msgs = conversations[i].messages || [];
+        for (let j = msgs.length - 1; j >= 0; j--) if (msgs[j].role === 'user') { sample = msgs[j].content || ''; break outer; }
+      }
+    }
+    if (/[\u0A00-\u0A7F]/.test(sample)) return 'pa-IN';
+    if (/[\u0980-\u09FF]/.test(sample)) return 'bn-IN';
+    if (/[\u0900-\u097F]/.test(sample)) return 'hi-IN';
+    if (/[\u0600-\u06FF]/.test(sample)) return /[\u0679\u0688\u0691\u06BA\u06BE\u06BB\u06D2\u06C3]/.test(sample) ? 'ur-PK' : 'ar-SA';
+    return navigator.language || 'en-US';
   }
   function toggleMic() {
     if (!recognition) return;
     if (listening) { recognition.stop(); return; }
+    try { recognition.lang = detectVoiceLang(); } catch (e) {}
     listening = true;
     document.getElementById('mic').classList.add('listening');
     recognition.start();
   }
+  renderVoiceLangBtn();
 
   // ====== ATTACH (placeholder) ======
   function attachFile() {
@@ -1019,8 +1082,7 @@
       // REAL verified user id - vault isi se khulta hai (server bhi verify karta hai)
       uid = authUser.id;
       closeLoginModal();
-      maybeSendPending(); // held prompt: login ke baad khud send
-      syncChatsFromServer(); // user ke chats account se load
+      syncChatsFromServer().finally(() => maybeSendPending()); // pehle chats load, PHIR held prompt — race-proof
     } else {
       accessToken = null;
       uid = localStorage.getItem('dc_user_id') || uid; // anonymous device fallback
