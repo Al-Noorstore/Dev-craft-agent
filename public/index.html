@@ -254,9 +254,9 @@
   </aside>
   
   <!-- LOGIN MODAL -->
-  <div id="loginModal" onclick="if(event.target===this)closeLoginModal()">
+  <div id="loginModal" onclick="if(event.target===this)dismissLoginModal()">
     <div class="login-card">
-      <button class="login-close" onclick="closeLoginModal()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <button class="login-close" onclick="dismissLoginModal()" aria-label="Close"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <div class="login-logo"><svg width="20" height="20" viewBox="0 0 24 24" fill="white"><path d="M13 2 3 14h7l-1 8 10-12h-7l1-8z"/></svg></div>
       <div class="login-eyebrow">Start using Dev Craft Agent.</div>
       <div class="login-title">Sign in to continue</div>
@@ -631,6 +631,9 @@
   async function sendMsg() {
     const text = input.value.trim();
     if (!text || busy) return;
+    // LOGGED-OUT: prompt hold + login card — login ke baad khud send hoga
+    if (!authUser) { try { await (authReadyPromise || Promise.resolve()); } catch (e) {} }
+    if (!authUser && sbClient) { loginToProceed(text); return; }
     if (connectView) { showConnect(); }
     if (!current()) newChat();
     const welcomeEl = chat.querySelector('.welcome');
@@ -1016,6 +1019,7 @@
       // REAL verified user id - vault isi se khulta hai (server bhi verify karta hai)
       uid = authUser.id;
       closeLoginModal();
+      maybeSendPending(); // held prompt: login ke baad khud send
       syncChatsFromServer(); // user ke chats account se load
     } else {
       accessToken = null;
@@ -1057,6 +1061,26 @@
   }
   function closeAcctPop() { const p = document.getElementById('acctPop'); if (p) p.classList.remove('open'); }
   document.addEventListener('click', (e) => { const w = document.getElementById('acctWrap'); if (w && !w.contains(e.target)) closeAcctPop(); });
+  function loginToProceed(text) {
+    try {
+      localStorage.setItem('dc_pending_prompt', JSON.stringify({ t: Date.now(), text: text }));
+      localStorage.setItem('dc_draft', text); // input refresh-safe
+    } catch (e) {}
+    openLoginModal();
+    const note = document.getElementById('loginNote');
+    const shortText = text.length > 40 ? text.slice(0, 40) + '…' : text;
+    if (note) note.textContent = 'Sign in karo — tumhara message login ke baad khud send ho jayega: "' + shortText + '"';
+  }
+  // Login hone pe held prompt khud send karo (email login + Google OAuth redirect dono mein)
+  function maybeSendPending() {
+    let pending = null;
+    try { pending = JSON.parse(localStorage.getItem('dc_pending_prompt') || 'null'); localStorage.removeItem('dc_pending_prompt'); } catch (e) { pending = null; }
+    if (!pending || !authUser) return;
+    if (Date.now() - (pending.t || 0) > 24 * 60 * 60 * 1000) return; // 24h se purana ignore
+    const txt = (pending.text || '').trim();
+    if (!txt) return;
+    setTimeout(() => { if (!authUser || busy) return; input.value = txt; input.style.height = 'auto'; sendMsg(); }, 900);
+  }
   function openLoginModal() {
     const note = document.getElementById('loginNote');
     const btn = document.getElementById('loginGoogleBtn');
@@ -1070,6 +1094,7 @@
     document.getElementById('loginModal').classList.add('open');
   }
   function closeLoginModal() { document.getElementById('loginModal').classList.remove('open'); }
+  function dismissLoginModal() { try { localStorage.removeItem('dc_pending_prompt'); } catch (e) {} closeLoginModal(); }
   function toggleEmailLogin() {
     const f = document.getElementById('emailLoginForm');
     f.style.display = f.style.display === 'none' ? 'block' : 'none';
@@ -1153,7 +1178,7 @@
       alert('Is browser mein direct install available nahi.\n\nAndroid: Chrome menu (⋮) > "Install app" / "Add to Home Screen"\niPhone: Safari > Share > "Add to Home Screen"');
     }
   }
-  initAuth();
+  const authReadyPromise = initAuth();
   // NAYA USER: 2 sec baad login card khud pop up (sirf first visit, logged-in user ko nahi)
   setTimeout(() => {
     try {
