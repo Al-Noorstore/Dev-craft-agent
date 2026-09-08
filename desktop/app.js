@@ -15,6 +15,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { exec } = require('child_process');
+const waWeb = require('./wa-web.js');
 
 const PORT = 3155;
 const IS_WIN = process.platform === 'win32';
@@ -147,6 +148,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'open_app', description: 'App, file ya website kholo. Examples: "notepad", "C:\\Program Files\\...\\app.exe", "https://youtube.com", koi bhi file.', parameters: { type: 'object', properties: { target: { type: 'string' } }, required: ['target'] } } },
   { type: 'function', function: { name: 'close_app', description: 'App band karo (process kill). Process name do, e.g. "notepad", "chrome", "vlc".', parameters: { type: 'object', properties: { process_name: { type: 'string' } }, required: ['process_name'] } } },
   { type: 'function', function: { name: 'youtube', description: 'YouTube control karo: search, video open, ya YouTube band karo.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['search', 'open', 'close'], description: 'search = YouTube pe search karo (query do), open = video/channel URL kholo (url do), close = YouTube browser tab/app band' }, query: { type: 'string' }, url: { type: 'string' } }, required: ['action'] } } },
+  { type: 'function', function: { name: 'whatsapp_web', description: "User ka WhatsApp Web kholo/control karo (Chrome window khulti hai, ek BAAR QR scan hota hai, uske baad session yaad rehta hai). Actions: connect (WhatsApp Web kholo), status (connected/login state), disconnect (band karo).", parameters: { type: 'object', properties: { action: { type: 'string', enum: ['connect', 'status', 'disconnect'] } }, required: ['action'] } } },
+  { type: 'function', function: { name: 'whatsapp_open_chat', description: "WhatsApp Web mein kisi naam ki chat kholo (search kar ke). e.g. 'Shahzad ki chat kholo' → name='Shahzad'. Pehle whatsapp_web connect hona chahiye.", parameters: { type: 'object', properties: { name: { type: 'string', description: 'jaisa naam WhatsApp mein saved hai' } }, required: ['name'] } } },
+  { type: 'function', function: { name: 'whatsapp_send', description: "WhatsApp Web se message bhejo (user ke apne number se). text = message. to = naam (agar wo chat khuli nahi hai ya doosre ko bhejna ho). e.g. 'Shahzad ko bolo hi' → to='Shahzad', text='hi'", parameters: { type: 'object', properties: { to: { type: 'string' }, text: { type: 'string' } }, required: ['text'] } } },
   { type: 'function', function: { name: 'system_info', description: 'PC ki info: OS, RAM, disk, current user, IP', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'credential_save', description: 'User ka API token/key/password local vault mein save karo (~/.dev-craft/credentials.json). User jab bhi koi token de ya "save karo" bole to ye use karo.', parameters: { type: 'object', properties: { name: { type: 'string', description: 'UPPERCASE naam, e.g. GITHUB_TOKEN, OPENAI_API_KEY' }, value: { type: 'string', description: 'asli token value' }, description: { type: 'string' } }, required: ['name', 'value'] } } },
   { type: 'function', function: { name: 'credential_list', description: 'Saare saved tokens ki masked list (values nahi dikhti)', parameters: { type: 'object', properties: {} } } },
@@ -161,6 +165,7 @@ const TOOLS = [
 
 const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - made by Wishal Noor. Agar koi poochhe 'tumhe kis ne banaya / who created you' to bolo: 'Mujhe Wishal Noor ne banaya hai (Dev Craft Studio)'. - running directly on the user's own laptop/PC (OpenClaw-style power user assistant). You have FULL tools:
 - run_command (terminal), file_write/file_read/file_list/file_delete/folder_create (file system), open_app/close_app (apps), youtube (search/open/close), system_info.
+- WHATSAPP WEB (user ke apne number se): whatsapp_web {action:"connect"} → Chrome window khulti hai, user ek BAAR QR scan karta hai (uske baad yaad rehta hai). 'Shahzad ki chat kholo' → whatsapp_open_chat {name}. 'Shahzad ko hi bhejo' / 'Tom ko ye message bhejo' → whatsapp_send {to:"Shahzad", text:"hi"}. Status: whatsapp_web {action:"status"}. Disconnect: whatsapp_web {action:"disconnect"}.
 
 RULES:
 1. User Roman Urdu/Urdu/English mein baat karega - usi language mein jawab do (Roman Urdu mix theek hai).
@@ -196,6 +201,9 @@ async function runTool(name, args, steps) {
       else if (args.action === 'open') { result = await openTarget(args.url || 'https://youtube.com'); title = '📺 YouTube khola'; }
       else { result = await killProcess(IS_WIN ? 'chrome' : 'firefox'); title = '📺 YouTube/browser band'; }
     }
+    else if (name === 'whatsapp_web') { result = await waWeb.action(args.action); title = '💬 WhatsApp Web: ' + String(args.action); if (result.qr) title = '💬 WhatsApp Web: QR scan karo (window mein)'; }
+    else if (name === 'whatsapp_open_chat') { result = await waWeb.openChat(args.name); title = '💬 Chat khola: ' + String(args.name).slice(0, 30); }
+    else if (name === 'whatsapp_send') { result = args.to ? await waWeb.sendTo(args.to, args.text) : await waWeb.send(args.text); title = '💬 WhatsApp send' + (args.to ? ' → ' + String(args.to).slice(0, 25) : ''); }
     else if (name === 'connect_ai_brain') {
     const prov = String(args.provider || '').toLowerCase().trim();
     const key = String(args.api_key || '').trim();

@@ -73,6 +73,7 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 - User ka kaam MCP server ke tool se ho sakta hai (Supabase queries, database edits, docs, koi bhi MCP service) to mcp_call_tool use karo: { server: naam, tool: tool ka naam, args: {} }. Tool ke params pehle test/confirm karke samjho.
 - MCP server fail ho to honest bolo: "MCP server connect nahi hua - URL/token check karo".
 - MCP ke bina bhi sab normal tools chalte hain - MCP sirf EXTRA power hai.
+- WHATSAPP (Cloud API mode - per-user): user bole 'mera WhatsApp Cloud API connect karo' + Meta token/phone_id de → whatsapp_connect. 'Tom ko WhatsApp pe message bhejo' → agar number nahi to poochho, phir whatsapp_send {to, text}. Connected hai ya nahi → whatsapp_status. Ye user ka APNA WhatsApp Business number hai (Meta Cloud API). Desktop app ka WhatsApp Web mode alag hai (laptop wala).
 
 ## AUTH SKILL (user ki website mein login laga do - REAL recipe, maine khud DCA pe use ki hai):
 - TRIGGER: "auth laga do", "login system banao", "Google login daalo", "sign in laga do", "user accounts chahiye", "members only area", "password protection".
@@ -128,6 +129,9 @@ const TOOLS = [
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
   { type: 'function', function: { name: 'run_pc_command', description: 'User ke connected PC/laptop pe terminal command chalao (Windows/Linux). SIRF tab use karo jab user ka PC connected ho - warna batao "pehle Connect PC page se PC connect karo". Commands: file dekhna, projects banana, git, npm, system info waghera.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'shell command, e.g. "dir" (Windows) ya "ls -la" (Linux)' } }, required: ['command'] } } },
   { type: 'function', function: { name: 'google_request', description: "User ke CONNECTED Google account ka API call — Gmail, Calendar, Drive (token khud manage hota hai). User ne Google account connect kiya ho to 'mere emails padho', 'calendar mein event daalo', 'Drive files dikhao' SAB is tool se karo. url examples: Gmail 'https://gmail.googleapis.com/gmail/v1/users/me/messages', Calendar 'https://www.googleapis.com/calendar/v3/users/me/events', Drive 'https://www.googleapis.com/drive/v3/files'", parameters: { type: 'object', properties: { url: { type: 'string', description: 'poora Google API URL (users/me use karo)' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, body: { type: 'object', description: 'JSON body (POST/PUT/PATCH)' } }, required: ['url'] } } },
+  { type: 'function', function: { name: 'whatsapp_connect', description: "User ka APNA WhatsApp Cloud API (Meta) connect karo — per-user. User Meta Business se Permanent Access Token + Phone Number ID dega. Dono encrypted vault mein save hote hain. Baad mein whatsapp_send se user ke number se messages jayenge.", parameters: { type: 'object', properties: { token: { type: 'string', description: 'Meta permanent access token (EAAG...)' }, phone_id: { type: 'string', description: 'Phone Number ID (digits)' } }, required: ['token', 'phone_id'] } } },
+  { type: 'function', function: { name: 'whatsapp_status', description: 'Check karo: user ka WhatsApp Cloud API connected hai ya nahi (masked info)', parameters: { type: 'object', properties: {} } } },
+  { type: 'function', function: { name: 'whatsapp_send', description: "User ke apne WhatsApp number se kisi ko DIRECT message bhejo (WhatsApp Cloud API se — laptop on hona zaroori NAHI). to = phone number country code ke saath bina + (e.g. 923001234567), text = message. Note: WhatsApp PEHLI baar message karne pe 24h window rule hota hai — business-initiated message ke liye template chahiye sakta hai; reply-window mein free text jata hai.", parameters: { type: 'object', properties: { to: { type: 'string' }, text: { type: 'string' } }, required: ['to', 'text'] } } },
   { type: 'function', function: { name: 'connect_ai_brain', description: "User ki di hui AI API key ko AGENT KA BRAIN bana do. Jab user chat mein koi AI ki key de + bole 'connect as AI brain' / 'isse socho' / 'ye use karo' to ye tool chalao. provider = user ne jo AI ka naam bola: gemini (Google Gemini), openai (OpenAI/ChatGPT), openrouter, groq, deepseek, mistral, anthropic (Claude), custom (base_url chahiye). Save hone ke baad agli message se agent usi AI se sochega — phir user ko confirm bolo.", parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['gemini', 'openai', 'openrouter', 'groq', 'deepseek', 'mistral', 'anthropic', 'custom'] }, api_key: { type: 'string', description: 'user ki di hui API key' }, model: { type: 'string', description: 'specific model (optional, default provider ka best)' }, base_url: { type: 'string', description: 'custom provider ke liye base URL' } }, required: ['provider', 'api_key'] } } },
 ];
 
@@ -162,8 +166,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠', whatsapp_connect: '💬', whatsapp_status: '💬', whatsapp_send: '💬' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon', whatsapp_connect: 'WhatsApp Cloud API connect kar raha hoon', whatsapp_status: 'WhatsApp connection check kar raha hoon', whatsapp_send: 'WhatsApp message bhej raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -286,6 +290,43 @@ async function runTool(name, args, steps, uid) {
       step.detail = 'HTTP ' + r.status;
       return JSON.stringify({ ok: r.ok, status: r.status, data: txt.slice(0, 4000) });
     } catch (e) { step.status = 'error'; step.detail = String(e.message).slice(0, 120); return JSON.stringify({ error: e.message }); }
+  }
+  if (name === 'whatsapp_connect') {
+    epName = null;
+    const wtoken = String(args.token || '').trim();
+    const wpid = String(args.phone_id || '').replace(/[^0-9]/g, '');
+    if (!wtoken || !wpid) { step.status = 'error'; step.detail = 'token + phone_id chahiye'; return JSON.stringify({ error: 'WhatsApp Cloud API ka token aur phone_id dono chahiye (Meta developers portal se)' }); }
+    try {
+      const r = await fetch('https://graph.facebook.com/v21.0/' + wpid, { headers: { Authorization: 'Bearer ' + wtoken } });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { step.status = 'error'; step.detail = 'token/phone_id galat'; return JSON.stringify({ error: 'Connect fail: ' + ((j.error && j.error.message) || 'HTTP ' + r.status) }); }
+      await vault.saveCredential('WA_CLOUD_TOKEN', wtoken, 'WhatsApp Cloud API token (user ka apna)', uid);
+      await vault.saveCredential('WA_CLOUD_PHONE_ID', wpid, 'WhatsApp Cloud API Phone Number ID', uid);
+      step.status = 'done'; step.detail = 'connected ' + (j.display_phone_number || wpid);
+      return JSON.stringify({ ok: true, connected: true, display_phone_number: j.display_phone_number, verified_name: j.verified_name });
+    } catch (e) { step.status = 'error'; step.detail = String(e.message || e).slice(0, 120); return JSON.stringify({ error: 'Network error: ' + String(e.message || e) }); }
+  }
+  if (name === 'whatsapp_status') {
+    epName = null;
+    const wtoken = await vault.getCredential('WA_CLOUD_TOKEN', uid);
+    const wpid = await vault.getCredential('WA_CLOUD_PHONE_ID', uid);
+    step.status = 'done'; step.detail = wtoken ? 'connected' : 'not connected';
+    return JSON.stringify({ connected: !!(wtoken && wpid), token_masked: wtoken ? wtoken.slice(0, 6) + '...' : null, phone_id: wpid || null, hint: wtoken ? null : 'WhatsApp Cloud API connect karne ke liye Meta Business Access Token + Phone Number ID do aur bolo "connect karo"' });
+  }
+  if (name === 'whatsapp_send') {
+    epName = null;
+    const wtoken = await vault.getCredential('WA_CLOUD_TOKEN', uid);
+    const wpid = await vault.getCredential('WA_CLOUD_PHONE_ID', uid);
+    const wto = String(args.to || '').replace(/[^0-9]/g, '');
+    if (!wtoken || !wpid) { step.status = 'error'; step.detail = 'not connected'; return JSON.stringify({ error: 'WhatsApp Cloud API connected nahi hai — pehle apna Meta token + Phone Number ID do (whatsapp_connect)' }); }
+    if (!wto) { step.status = 'error'; step.detail = 'to missing'; return JSON.stringify({ error: 'to = phone number country code ke saath chahiye (e.g. 923001234567)' }); }
+    try {
+      const r = await fetch('https://graph.facebook.com/v21.0/' + wpid + '/messages', { method: 'POST', headers: { Authorization: 'Bearer ' + wtoken, 'Content-Type': 'application/json' }, body: JSON.stringify({ messaging_product: 'whatsapp', to: wto, type: 'text', text: { body: String(args.text || '') } }) });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) { step.status = 'error'; step.detail = 'send fail'; return JSON.stringify({ error: 'Send fail: ' + ((j.error && j.error.message) || 'HTTP ' + r.status), hint: (j.error && j.error.error_subcode === 132000) ? '24h window — pehle registered template use karna padega' : null }); }
+      step.status = 'done'; step.detail = 'sent → ' + wto;
+      return JSON.stringify({ ok: true, message_id: (j.messages && j.messages[0] && j.messages[0].id) || null, to: wto });
+    } catch (e) { step.status = 'error'; step.detail = String(e.message || e).slice(0, 120); return JSON.stringify({ error: 'Network error: ' + String(e.message || e) }); }
   }
   if (name === 'connect_ai_brain') {
     epName = null;
