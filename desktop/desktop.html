@@ -48,7 +48,13 @@
   #mcpModal.open { display: flex; }
   #settingsModal { position:fixed; inset:0; background:rgba(17,24,39,.45); z-index:90; display:none; align-items:center; justify-content:center; padding:16px; }
   #settingsModal.open { display:flex; }
-  .set-box { background:var(--card); border-radius:16px; padding:20px; width:100%; max-width:400px; }
+  .set-box { background:var(--card); border-radius:16px; padding:20px; width:100%; max-width:400px; max-height:85vh; overflow-y:auto; }
+  .set-box::-webkit-scrollbar { width:6px; }
+  .set-box::-webkit-scrollbar-track { background:transparent; }
+  .set-box::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
+  #chat::-webkit-scrollbar { width:6px; }
+  #chat::-webkit-scrollbar-track { background:transparent; }
+  #chat::-webkit-scrollbar-thumb { background:var(--border); border-radius:3px; }
   .set-box h3 { font-size:16px; margin-bottom:12px; }
   .set-label { font-size:11px; font-weight:800; color:var(--text-muted); margin:12px 0 6px; text-transform:uppercase; letter-spacing:.5px; }
   .provider-row { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
