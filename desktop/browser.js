@@ -4,9 +4,13 @@
 // CDP + apna mini WebSocket client. WhatsApp Web
 // wale browser se hi share karta hai (agar chalu
 // hai to same window, warna khud launch).
-// ytSearchPlay(query, n) → nth video click.
+// - ytOpen()               → YouTube tab kholo/focus
+// - ytSearch(q, separate)  → same tab ya naye tab mein search
+// - ytPlay(n)              → khuli results mein se nth video play
+// - ytSearchPlay(q, n)     → search karke nth video play
+// - ytClose()              → YouTube tabs band
 // ============================================
-const { spawn, exec } = require('child_process');
+const { spawn } = require('child_process');
 const http = require('http');
 const os = require('os');
 const path = require('path');
@@ -15,8 +19,6 @@ const crypto = require('crypto');
 
 const DEBUG_PORT = 9333;
 const PROFILE_DIR = path.join(os.homedir(), '.dev-craft', 'wa-profile');
-
-const st = { proc: null, spawned: false };
 
 function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 
@@ -134,63 +136,116 @@ async function evaluate(cdp, js) {
   return r.result && r.result.value;
 }
 
-// browser chalu hai (kisi ne bhi launch kiya, e.g. whatsapp web) to reuse karo
 async function ensureBrowser() {
   let ver = await httpJson('http://127.0.0.1:' + DEBUG_PORT + '/json/version');
-  if (ver) return { reused: true };
+  if (ver) return { ok: true, reused: true };
   const bin = findBrowser();
   if (!bin) return { error: 'Chrome ya Edge nahi mila — pehle install karo (google.com/chrome)' };
   fs.mkdirSync(path.dirname(PROFILE_DIR), { recursive: true });
-  st.proc = spawn(bin, [
+  spawn(bin, [
     '--remote-debugging-port=' + DEBUG_PORT,
     '--user-data-dir=' + PROFILE_DIR,
     '--no-first-run', '--no-default-browser-check', '--window-size=1250,850'
   ], { detached: false, stdio: 'ignore' });
-  st.spawned = true;
   for (let i = 0; i < 20; i++) { await sleep(1000); ver = await httpJson('http://127.0.0.1:' + DEBUG_PORT + '/json/version'); if (ver) break; }
   if (!ver) return { error: 'Browser start nahi hua — dobara try karo' };
   return { ok: true, browser: path.basename(bin) };
 }
 
-async function findOrCreateTab(urlPart) {
-  for (let i = 0; i < 5; i++) {
-    const list = await httpJson('http://127.0.0.1:' + DEBUG_PORT + '/json');
-    let t = (list || []).find(t => (t.url || '').includes(urlPart) && t.type === 'page');
-    if (t) return t;
-    if (i === 4) {
-      // naya tab banao (Chrome >= 111 mein PUT chahiye)
-      try {
-        await new Promise((res3, rej3) => {
-          const r2 = http.request({ host: '127.0.0.1', port: DEBUG_PORT, path: '/json/new?about:blank', method: 'PUT' }, (rr) => { rr.resume(); rr.on('end', res3); });
-          r2.on('error', rej3); r2.end();
-        });
-      } catch (e) {}
-    }
-    await sleep(1000);
-  }
-  return null;
+async function versionInfo() { return httpJson('http://127.0.0.1:' + DEBUG_PORT + '/json/version'); }
+async function listTabs() { const l = await httpJson('http://127.0.0.1:' + DEBUG_PORT + '/json'); return Array.isArray(l) ? l : []; }
+
+// naya tab banao (Chrome 111+ mein PUT chahiye) → target info return
+function newTab(url) {
+  return new Promise((resolve, reject) => {
+    const r = http.request({ host: '127.0.0.1', port: DEBUG_PORT, path: '/json/new?' + encodeURIComponent(url), method: 'PUT' }, (rr) => {
+      let b = ''; rr.on('data', c => b += c); rr.on('end', () => { try { resolve(JSON.parse(b)); } catch (e) { resolve(null); } });
+    });
+    r.setTimeout(8000, () => { r.destroy(); resolve(null); });
+    r.on('error', () => resolve(null));
+    r.end();
+  });
 }
 
-// YouTube search karke nth video play karo (n=3 → teesra)
-async function ytSearchPlay(query, n) {
-  const q = String(query || '').trim();
-  const idx = Math.max(1, parseInt(n, 10) || 3);
-  if (!q) return { error: 'search keyword chahiye' };
+async function activateTab(targetId) {
+  try {
+    const ver = await versionInfo();
+    const cdp = await cdpConnect(ver.webSocketDebuggerUrl);
+    await cdp.send('Target.activateTarget', { targetId });
+    cdp.close();
+    return true;
+  } catch (e) { return false; }
+}
+
+async function closeTab(targetId) {
+  try {
+    const ver = await versionInfo();
+    const cdp = await cdpConnect(ver.webSocketDebuggerUrl);
+    await cdp.send('Target.closeTarget', { targetId });
+    cdp.close();
+    return true;
+  } catch (e) { return false; }
+}
+
+function isYtTab(t) { return t && t.type === 'page' && (t.url || '').includes('youtube.com'); }
+function isYtResultsTab(t) { return isYtTab(t) && (t.url || '').includes('search_query='); }
+
+// ---- YouTube actions ----
+
+// YouTube kholo: khula tab hai to usse focus, warna naya tab
+async function ytOpen(url) {
   const up = await ensureBrowser();
   if (up.error) return up;
-  const cdp = await cdpConnect((await httpJson('http://127.0.0.1:' + DEBUG_PORT + '/json/version')).webSocketDebuggerUrl);
-  await cdp.send('Runtime.enable', {});
-  // current page ya naya tab — YouTube results pe le jao
-  await evaluate(cdp, `location.href = 'https://www.youtube.com/results?search_query=' + ${JSON.stringify(encodeURIComponent(q))}`);
-  await sleep(3000);
-  // videos load hone tak wait
+  const target = url || 'https://www.youtube.com';
+  const tabs = await listTabs();
+  const yt = tabs.find(isYtTab);
+  if (yt && !url) {
+    // pehle se khula → wahi tab pe le aao
+    if (yt.webSocketDebuggerUrl) {
+      try { const cdp = await cdpConnect(yt.webSocketDebuggerUrl); await evaluate(cdp, `location.href = ${JSON.stringify(target)}`); cdp.close(); } catch (e) {}
+    }
+    await activateTab(yt.id);
+    return { ok: true, tab: 'existing', url: target };
+  }
+  const t = await newTab(target);
+  if (!t) return { error: 'Tab nahi khul saka — dobara try karo' };
+  await activateTab(t.id);
+  return { ok: true, tab: 'new', url: target };
+}
+
+// Search: separate=true → naya tab, warna khule YouTube tab mein SAME tab search
+async function ytSearch(query, opts) {
+  const q = String(query || '').trim();
+  if (!q) return { error: 'search keyword chahiye' };
+  const separate = opts && opts.separate;
+  const up = await ensureBrowser();
+  if (up.error) return up;
+  const resultsUrl = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+  const tabs = await listTabs();
+  const yt = tabs.find(isYtTab);
+  if (!separate && yt && yt.webSocketDebuggerUrl) {
+    try {
+      const cdp = await cdpConnect(yt.webSocketDebuggerUrl);
+      await evaluate(cdp, `location.href = ${JSON.stringify(resultsUrl)}`);
+      cdp.close();
+      await activateTab(yt.id);
+      return { ok: true, tab: 'same', query: q };
+    } catch (e) { /* fallthrough → naya tab */ }
+  }
+  const t = await newTab(resultsUrl);
+  if (!t) return { error: 'Tab nahi khul saka — dobara try karo' };
+  await activateTab(t.id);
+  return { ok: true, tab: separate ? 'separate' : 'new', query: q };
+}
+
+// khulī results page se nth video click karo (shared)
+async function clickNth(cdp, idx) {
   for (let i = 0; i < 15; i++) {
     const cnt = await evaluate(cdp, `document.querySelectorAll('ytd-video-renderer a#thumbnail[href*="/watch"], ytd-grid-video-renderer a#thumbnail[href*="/watch"]').length`);
     if (cnt && cnt >= idx) break;
     await sleep(1000);
   }
-  // nth video click
-  const picked = await evaluate(cdp, `(function(){
+  return evaluate(cdp, `(function(){
     var vids = document.querySelectorAll('ytd-video-renderer a#thumbnail[href*="/watch"], ytd-grid-video-renderer a#thumbnail[href*="/watch"]');
     if (!vids.length) return null;
     var el = vids[${idx} - 1];
@@ -200,12 +255,59 @@ async function ytSearchPlay(query, n) {
     el.click();
     return JSON.stringify({ title: title, index: ${idx}, total: vids.length });
   })()`);
-  if (!picked) return { error: 'Search results nahi mile — internet check karo (YouTube login/consent screen aa sakta hai, window mein dekho)' };
-  await sleep(4000);
-  const playing = await evaluate(cdp, `(location.href.includes('/watch'))`);
-  let info = {}; try { info = JSON.parse(picked); } catch (e) {}
-  cdp.close();
-  return { ok: true, playing: !!playing, query: q, picked_index: idx, title: info.title || '', total_results: info.total, note: playing ? 'video chal raha hai' : 'click hua but confirm nahi — window mein dekho' };
 }
 
-module.exports = { ytSearchPlay };
+// ABHI khuli results list mein se nth video play (search DOBARA nahi hota)
+async function ytPlay(n) {
+  const idx = Math.max(1, parseInt(n, 10) || 1);
+  const up = await ensureBrowser();
+  if (up.error) return up;
+  const tabs = await listTabs();
+  let res = tabs.find(isYtResultsTab);
+  if (!res) res = tabs.find(isYtTab);
+  if (!res) return { error: 'Koi YouTube results tab khuli nahi hai — pehle "search karo" bolo (e.g. "masihi geet search karo")' };
+  if (!isYtResultsTab(res)) return { error: 'YouTube tab mein results nahi hain — pehle koi search karo, phir "nth video chalao" bolo' };
+  const cdp = await cdpConnect(res.webSocketDebuggerUrl);
+  await cdp.send('Runtime.enable', {});
+  const picked = await clickNth(cdp, idx);
+  if (!picked) { cdp.close(); return { error: 'Results mein videos nahi mile — window mein check karo' }; }
+  await sleep(4000);
+  const playing = await evaluate(cdp, `(location.href.includes('/watch'))`);
+  await activateTab(res.id);
+  let info = {}; try { info = JSON.parse(picked); } catch (e) {}
+  cdp.close();
+  return { ok: true, playing: !!playing, picked_index: idx, title: info.title || '', total_results: info.total, note: playing ? 'video chal raha hai' : 'click hua but confirm nahi — window mein dekho' };
+}
+
+// search karke nth video play (n=3 → teesra)
+async function ytSearchPlay(query, n, opts) {
+  const idx = Math.max(1, parseInt(n, 10) || 3);
+  const s = await ytSearch(query, opts);
+  if (s.error) return s;
+  await sleep(2500);
+  const tabs = await listTabs();
+  let res = tabs.find(t => isYtResultsTab(t) && decodeURIComponent(t.url || '').includes(encodeURIComponent(String(query).trim()).slice(0, 10)));
+  if (!res) res = tabs.find(isYtResultsTab);
+  if (!res) return { error: 'Results page load nahi hua — internet check karo' };
+  const cdp = await cdpConnect(res.webSocketDebuggerUrl);
+  await cdp.send('Runtime.enable', {});
+  const picked = await clickNth(cdp, idx);
+  if (!picked) { cdp.close(); return { error: 'Search results nahi mile — internet check karo (YouTube login/consent screen aa sakta hai, window mein dekho)' }; }
+  await sleep(4000);
+  const playing = await evaluate(cdp, `(location.href.includes('/watch'))`);
+  await activateTab(res.id);
+  let info = {}; try { info = JSON.parse(picked); } catch (e) {}
+  cdp.close();
+  return { ok: true, playing: !!playing, query: String(query || '').trim(), picked_index: idx, title: info.title || '', total_results: info.total, tab: s.tab, note: playing ? 'video chal raha hai' : 'click hua but confirm nahi — window mein dekho' };
+}
+
+// YouTube tabs band (browser nahi, sirf YT tabs)
+async function ytClose() {
+  const tabs = await listTabs();
+  const yt = tabs.filter(isYtTab);
+  if (!yt.length) return { ok: true, closed: 0, note: 'koi YouTube tab khula nahi tha' };
+  for (const t of yt) await closeTab(t.id);
+  return { ok: true, closed: yt.length };
+}
+
+module.exports = { ytOpen, ytSearch, ytPlay, ytSearchPlay, ytClose };
