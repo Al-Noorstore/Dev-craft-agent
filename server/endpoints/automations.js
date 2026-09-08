@@ -29,6 +29,9 @@ module.exports = async (req, res) => {
 
     if (!SB_URL || !SB_KEY) return res.status(500).json(setupHelp);
 
+    // PER-USER: verified uid (chat.js access_token se inject karta hai), warna anonymous device id, warna 'owner'
+    const userId = String(body.user_id || (req.query && req.query.user_id) || 'owner');
+
     const headers = {
       'apikey': SB_KEY,
       'Authorization': 'Bearer ' + SB_KEY,
@@ -43,7 +46,7 @@ module.exports = async (req, res) => {
       const insertRes = await fetch(SB_URL + '/rest/v1/automations', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ name, prompt, schedule: schedule || 'daily', active: true })
+        body: JSON.stringify({ name, prompt, schedule: schedule || 'daily', active: true, user_id: userId })
       });
       if (!insertRes.ok) {
         const errText = await insertRes.text();
@@ -55,7 +58,7 @@ module.exports = async (req, res) => {
 
     // LIST
     if (action === 'list') {
-      const listRes = await fetch(SB_URL + '/rest/v1/automations?select=*&order=created_at.desc', { headers });
+      const listRes = await fetch(SB_URL + '/rest/v1/automations?select=*&user_id=eq.' + encodeURIComponent(userId) + '&order=created_at.desc', { headers });
       if (!listRes.ok) {
         const errText = await listRes.text();
         return res.status(500).json({ error: 'Supabase list failed: ' + errText.slice(0, 200), setup_help: setupHelp.setup_help });
@@ -68,7 +71,7 @@ module.exports = async (req, res) => {
     if (action === 'delete') {
       const id = body.id || (req.query && req.query.id);
       if (!id) return res.status(400).json({ error: 'id is required' });
-      const delRes = await fetch(SB_URL + '/rest/v1/automations?id=eq.' + encodeURIComponent(id), {
+      const delRes = await fetch(SB_URL + '/rest/v1/automations?id=eq.' + encodeURIComponent(id) + '&user_id=eq.' + encodeURIComponent(userId), {
         method: 'DELETE',
         headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Prefer': 'return=representation' }
       });

@@ -61,7 +61,7 @@ module.exports = async (req, res) => {
             messages.push(msg);
             for (const tc of msg.tool_calls) {
               let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch {}
-              const result = await chatBrain.runTool(tc.function.name, args, steps);
+              const result = await chatBrain.runTool(tc.function.name, args, steps, a.user_id || 'owner');
               messages.push({ role: 'tool', tool_call_id: tc.id, content: String(result).slice(0, 3500) });
             }
             continue;

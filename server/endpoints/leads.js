@@ -32,6 +32,9 @@ module.exports = async (req, res) => {
       'Prefer': 'return=representation'
     };
 
+    // PER-USER: verified uid (chat.js inject karta hai), warna 'owner'
+    const userId = String((req.body && req.body.user_id) || (req.query && req.query.user_id) || 'owner');
+
     // SAVE lead
     if (req.method === 'POST') {
       const lead = req.body || {};
@@ -49,7 +52,8 @@ module.exports = async (req, res) => {
           audit_score: lead.audit_score ?? null,
           lead_score: lead.lead_score ?? null,
           status: lead.status || 'new',
-          notes: lead.notes || null
+          notes: lead.notes || null,
+          user_id: userId
         })
       });
       if (!insertRes.ok) throw new Error('Supabase insert failed: ' + await insertRes.text());
@@ -58,7 +62,7 @@ module.exports = async (req, res) => {
     }
 
     // LIST leads
-    const listRes = await fetch(SB_URL + '/rest/v1/leads?select=*&order=lead_score.desc.nullslast', { headers });
+    const listRes = await fetch(SB_URL + '/rest/v1/leads?select=*&user_id=eq.' + encodeURIComponent(userId) + '&order=lead_score.desc.nullslast', { headers });
     if (!listRes.ok) throw new Error('Supabase query failed: ' + await listRes.text());
     const leads = await listRes.json();
     res.json({ count: leads.length, leads });

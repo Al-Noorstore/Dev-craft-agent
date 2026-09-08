@@ -264,6 +264,16 @@
         <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.5 0 6.6 1.2 9.1 3.6l6.4-6.4C35.6 3 30.1 1 24 1 14.6 1 6.5 6.4 2.6 14.1l7.5 5.8C12.1 13.9 17.6 9.5 24 9.5z"/><path fill="#4285F4" d="M46.5 24.5c0-1.6-.1-3.1-.4-4.5H24v9h12.7c-.6 3-2.3 5.5-4.8 7.2l7.4 5.7C43.9 37.6 46.5 31.6 46.5 24.5z"/><path fill="#FBBC05" d="M10.1 19.9c-.6 1.6-.9 3.3-.9 5.1s.3 3.5.9 5.1l-7.5 5.8C.9 32.5 0 28.4 0 24s.9-8.5 2.6-11.9l7.5 5.8z"/><path fill="#34A853" d="M24 47c6.1 0 11.6-2 15.5-5.5l-7.4-5.7c-2.1 1.4-4.8 2.3-8.1 2.3-6.4 0-11.9-4.4-13.9-10.4l-7.5 5.8C6.5 41.6 14.6 47 24 47z"/></svg>
         <span id="loginGoogleBtnTxt">Continue with Google</span>
       </button>
+      <div style="text-align:center;margin:12px 0 2px;font-size:12px;color:var(--text-muted)">ya</div>
+      <div style="text-align:center"><a href="#" onclick="event.preventDefault();toggleEmailLogin()" style="font-size:12.5px;color:var(--primary);font-weight:600;text-decoration:none">Email + password se sign in</a></div>
+      <div id="emailLoginForm" style="display:none;margin-top:12px">
+        <input type="email" id="loginEmail" class="set-input" placeholder="you@email.com" style="width:100%;box-sizing:border-box">
+        <input type="password" id="loginPass" class="set-input" placeholder="Password (min 6 chars)" style="width:100%;margin-top:8px;box-sizing:border-box">
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="login-google-btn" style="flex:1;justify-content:center" id="emailSignInBtn" onclick="emailSignIn(false)">Sign in</button>
+          <button class="login-google-btn" style="flex:1;justify-content:center" id="emailSignUpBtn" onclick="emailSignIn(true)">Sign up</button>
+        </div>
+      </div>
       <div class="login-note" id="loginNote"></div>
       <div class="login-terms">By continuing, you agree to Dev Craft Agent's <a href="#" onclick="event.preventDefault()">Terms</a> and <a href="#" onclick="event.preventDefault()">Privacy Policy</a>.</div>
     </div>
@@ -412,9 +422,42 @@
   const COPY_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><rect x="9" y="9" width="12" height="12" rx="2" stroke="currentColor" stroke-width="1.8"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" stroke="currentColor" stroke-width="1.8"/></svg>';
   const SPEAK_SVG = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M11 5 6 9H2v6h4l5 4V5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
+  // ===== PER-USER CHAT SYNC (logged-in user ke chats Supabase pe bhi) =====
+  let chatPushTimer = null, lastSyncUid = null;
   function save() {
     localStorage.setItem('dc_conversations', JSON.stringify(conversations));
     localStorage.setItem('dc_current', currentId || '');
+    // logged-in user? chats server pe bhi save karo (debounced - har message pe nahi)
+    try {
+      if (typeof authUser !== 'undefined' && authUser && typeof sbClient !== 'undefined' && sbClient) {
+        clearTimeout(chatPushTimer);
+        chatPushTimer = setTimeout(pushChatsToServer, 1200);
+      }
+    } catch (e) {}
+  }
+  async function pushChatsToServer() {
+    if (!authUser || !sbClient) return;
+    try {
+      await sbClient.from('chats').upsert({ user_id: authUser.id, conversations: conversations, current_id: currentId || '', updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+    } catch (e) {}
+  }
+  async function syncChatsFromServer() {
+    if (!authUser || !sbClient) return;
+    if (lastSyncUid === authUser.id) return;
+    lastSyncUid = authUser.id;
+    try {
+      const { data, error } = await sbClient.from('chats').select('conversations,current_id').eq('user_id', authUser.id).maybeSingle();
+      if (error) throw error;
+      if (data && Array.isArray(data.conversations) && data.conversations.length) {
+        // LOGIN: apne chats wapas mil gaye (dosre device ya dobara login)
+        conversations = data.conversations;
+        currentId = data.current_id || (conversations[0] && conversations[0].id) || null;
+        save(); renderSidebar(); renderChat();
+      } else if (conversations.length) {
+        // naya account jo purane (anonymous) local chats ko adopt kare
+        await pushChatsToServer();
+      }
+    } catch (e) { lastSyncUid = null; }
   }
   function current() { return conversations.find(c => c.id === currentId); }
 
@@ -973,6 +1016,7 @@
       // REAL verified user id - vault isi se khulta hai (server bhi verify karta hai)
       uid = authUser.id;
       closeLoginModal();
+      syncChatsFromServer(); // user ke chats account se load
     } else {
       accessToken = null;
       uid = localStorage.getItem('dc_user_id') || uid; // anonymous device fallback
@@ -1026,6 +1070,33 @@
     document.getElementById('loginModal').classList.add('open');
   }
   function closeLoginModal() { document.getElementById('loginModal').classList.remove('open'); }
+  function toggleEmailLogin() {
+    const f = document.getElementById('emailLoginForm');
+    f.style.display = f.style.display === 'none' ? 'block' : 'none';
+  }
+  async function emailSignIn(signup) {
+    const note = document.getElementById('loginNote');
+    const em = (document.getElementById('loginEmail').value || '').trim();
+    const pw = document.getElementById('loginPass').value || '';
+    if (!em || !pw) { note.textContent = 'Email aur password dono likho.'; return; }
+    if (!sbClient) { note.textContent = 'Login module load nahi hua — page refresh kar ke dobara try karo.'; return; }
+    const btn = document.getElementById(signup ? 'emailSignUpBtn' : 'emailSignInBtn');
+    btn.disabled = true; note.textContent = '';
+    try {
+      if (signup) {
+        const { error } = await sbClient.auth.signUp({ email: em, password: pw });
+        if (error) throw error;
+        note.textContent = 'Account ban gaya! Email confirm karke sign in karo (ya auto-confirm on hai to turant sign in ho).';
+      } else {
+        const { error } = await sbClient.auth.signInWithPassword({ email: em, password: pw });
+        if (error) throw error;
+        // applySession khud hoga (onAuthStateChange)
+      }
+    } catch (e) {
+      note.textContent = 'Login error: ' + (e.message || e);
+    }
+    btn.disabled = false;
+  }
   async function signInGoogle() {
     const btn = document.getElementById('loginGoogleBtn');
     const txt = document.getElementById('loginGoogleBtnTxt');
@@ -1048,6 +1119,10 @@
     try { Object.keys(localStorage).filter(k => k.indexOf('sb-') === 0 || k.indexOf('supabase') >= 0).forEach(k => localStorage.removeItem(k)); } catch (e) {}
     accessToken = null;
     authUser = null;
+    lastSyncUid = null;
+    // LOGOUT = chats gayab: local cache saaf (server pe account mein safe hain)
+    try { localStorage.removeItem('dc_conversations'); localStorage.removeItem('dc_current'); localStorage.removeItem('dc_draft'); } catch (e) {}
+    try { conversations = []; currentId = null; } catch (e) {}
     applySession(null);
     location.reload(); // saaf-suthra logged-out state, koi stale UI nahi
   }
