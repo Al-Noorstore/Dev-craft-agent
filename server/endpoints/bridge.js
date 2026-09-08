@@ -113,10 +113,11 @@ module.exports = async (req, res) => {
     if (action === 'result') {
       const { job_id, result, status } = body;
       if (!job_id) return res.status(400).json({ error: 'job_id required' });
-      await fetch(SB_URL + '/rest/v1/bridge_jobs?id=eq.' + encodeURIComponent(job_id), {
+      const resRes = await fetch(SB_URL + '/rest/v1/bridge_jobs?id=eq.' + encodeURIComponent(job_id), {
         method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
-        body: JSON.stringify({ status: status === 'error' ? 'error' : 'done', result: result || null, completed_at: new Date().toISOString() })
+        body: JSON.stringify({ status: status === 'error' ? 'error' : 'done', result: result || null })
       });
+      if (!resRes.ok) return res.status(500).json({ error: 'Result save failed: ' + (await resRes.text()).slice(0, 120) });
       return res.json({ success: true });
     }
 
