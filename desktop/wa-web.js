@@ -255,10 +255,93 @@ async function send(text) {
   return { ok: true, sent: sent === 'sent' || true, to: st.lastChat, note: sent === 'check' ? 'send hua lagta hai — window mein confirm karo' : '' };
 }
 
+// WhatsApp Web: apna bheja hua message delete karo
+// which: 1 = last sent, 2 = second-last sent... | mode: 'everyone' | 'me'
+async function deleteMsg(name, opts) {
+  opts = opts || {};
+  const which = Math.max(1, parseInt(opts.which, 10) || 1);
+  const mode = opts.mode === 'me' ? 'me' : 'everyone';
+  const p = await pageStatus();
+  if (!p.running) return { error: 'WhatsApp Web connected nahi — pehle "WhatsApp Web kholo" bolo' };
+  if (!p.logged_in) return { error: 'Pehle WhatsApp window mein QR scan karo', need_qr: true };
+  if (name) { const o = await openChat(name); if (o.error) return o; }
+  // target outgoing message ka rect
+  const rect = await evaluate(`(function(){
+    var outs = document.querySelectorAll('#main .message-out');
+    if (!outs.length) return null;
+    var el = outs[outs.length - ${which}];
+    if (!el) return null;
+    var r = el.getBoundingClientRect();
+    return JSON.stringify({ x: r.x, y: r.y, w: r.width, h: r.height, total: outs.length });
+  })()`);
+  if (!rect) return { error: 'Koi sent message nahi mila (sirf TUMHARE bheje messages delete ho sakte hain)' };
+  let box = {}; try { box = JSON.parse(rect); } catch (e) { return { error: 'message locate fail' }; }
+  // hover → chevron reveal karo
+  await st.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x + box.w / 2, y: box.y + box.h / 2, button: 'none', buttons: 0 });
+  await sleep(600);
+  // chevron button ke coordinates
+  const chev = await evaluate(`(function(){
+    var outs = document.querySelectorAll('#main .message-out');
+    var el = outs[outs.length - ${which}];
+    if (!el) return null;
+    var b = el.querySelector('[data-icon="chevron-down"], [data-icon="down"], [data-icon="down-context-menu"]');
+    if (!b) return null;
+    var r = b.getBoundingClientRect();
+    return JSON.stringify({ x: r.x + r.width / 2, y: r.y + r.height / 2 });
+  })()`);
+  let cxy = null; try { cxy = chev ? JSON.parse(chev) : null; } catch (e) {}
+  let cx, cy;
+  if (cxy) { cx = cxy.x; cy = cxy.y; }
+  else { cx = box.x + box.w - 18; cy = box.y + box.h - 14; } // fallback: bubble ke bottom-right corner
+  await st.cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: cx, y: cy, button: 'none', buttons: 0 });
+  await sleep(300);
+  await st.cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: cx, y: cy, button: 'left', buttons: 1, clickCount: 1 });
+  await st.cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: cx, y: cy, button: 'left', buttons: 0, clickCount: 1 });
+  await sleep(900);
+  // menu item "Delete message"
+  const clickedDel = await evaluate(`(function(){
+    var nodes = document.querySelectorAll('div, span, li, [role="menuitem"], [role="button"]');
+    var rx = /delete|مٹا|حذف|پیغام مٹ/i;
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].children.length > 0) continue; // leaf nodes only
+      var t = (nodes[i].innerText || '').trim();
+      if (t && t.length < 40 && rx.test(t)) { nodes[i].click(); return t; }
+    }
+    return null;
+  })()`);
+  if (!clickedDel) return { error: 'Delete menu nahi mila — WhatsApp Web window mein UI check karo (delete option sirf recent messages pe hota hai)' };
+  await sleep(1200);
+  // dialog: "Delete for everyone" ya "Delete for me"
+  const picked = await evaluate(`(function(){
+    var nodes = document.querySelectorAll('button, div, span, [role="button"]');
+    var del = /delete|مٹا|حذف/i;
+    var every = /everyone|سب کے لیے|سب کیلئے|ہر ایک/i;
+    var me = /for me|مجھ|صرف مجھ/i;
+    var cands = [];
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i].children.length > 0) continue;
+      var t = (nodes[i].innerText || '').trim();
+      if (t && t.length < 35 && del.test(t)) cands.push({ el: nodes[i], t: t });
+    }
+    ${mode === 'everyone' ? `
+    for (var j = 0; j < cands.length; j++) { if (every.test(cands[j].t)) { cands[j].el.click(); return cands[j].t; } }
+    return null;` : `
+    for (var k = 0; k < cands.length; k++) { if (me.test(cands[k].t)) { cands[k].el.click(); return cands[k].t; } }
+    if (cands.length === 1) { cands[0].el.click(); return cands[0].t; }
+    return null;`}
+  })()`);
+  if (!picked) return { error: mode === 'everyone' ? '"Delete for everyone" button nahi mila — message bahut purana ho sakta hai (WhatsApp sirf recent messages sab ke liye delete karne deta hai). Window mein manually check karo.' : '"Delete for me" button nahi mila — window mein manually check karo.' };
+  await sleep(1000);
+  // verify: count kam hua?
+  let after = null;
+  try { after = await evaluate(`document.querySelectorAll('#main .message-out').length`); } catch (e) {}
+  return { ok: true, deleted: true, mode: mode === 'everyone' ? 'sab ke liye (delete for everyone)' : 'sirf mujhe (delete for me)', which: which, to: st.lastChat, count_before: box.total, count_after: after };
+}
+
 async function sendTo(name, text) {
   const o = await openChat(name);
   if (o.error) return o;
   return await send(text);
 }
 
-module.exports = { action, openChat, send, sendTo };
+module.exports = { action, openChat, send, sendTo, deleteMsg };
