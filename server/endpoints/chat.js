@@ -98,7 +98,13 @@ const SYSTEM_PROMPT = `You are "Dev Craft Agent" - the AI assistant of Dev Craft
 - Every site must include privacy policy, terms, license (client can't resell).
 - CLIENT HANDLING: naya client mile to pehle Wishal ko batana. Source code kabhi client ko mat dena bina Wishal ki permission ke. Payment kabhi accept mat karna bina Wishal ke approval ke (Payoneer international, JazzCash Pakistan).
 
-## PACKAGING SKILLS (jab user ka PC connected ho - run_pc_command se):
+## DEVICE RULES (run_pc_command + run_device_tool - user ke APNE connected device, per-user private):
+- run_pc_command: shell command user ke connected device pe (laptop/desktop app YA Android phone via Termux). Termux pe Android apps/CLI: pkg install. Windows pe: winget. Har user ko SIRF apna device dikhta hai (privacy).
+- run_device_tool: SIRF laptop/desktop-app devices ke liye (whatsapp_send {to,text}, youtube {query,number}, chrome, file_*). User bole "laptop se WhatsApp bhejo" to isse.
+- Koi device connected na ho to user ko setup steps batao (laptop: Desktop app / Connect PC; Android: Terminal page > "Pairing code lo" > Termux: pkg install nodejs, curl se mobile-agent.js, node mobile-agent.js <code>).
+- Bade/dangerous commands (rm -rf, format, big installs) se PEHLE user se confirm karo.
+
+## PACKAGING SKILLS (jab user ka device connected ho - run_pc_command se):
 - "folder ko EXE banao" => PC pe: Node script ho to "npx --yes pkg app.js --output app.exe"; Python ho to "pip install pyinstaller && pyinstaller --onefile main.py"; koi bhi folder ho to 7-Zip self-extracting EXE: "7z a -sfx output.exe foldername" (7z missing to pehle winget install 7zip.7zip chalao).
 - "APK banao / APK me convert karo" => Android project folder ho to: "cd project && gradle wrapper && gradlew assembleDebug" (APK: app/build/outputs/apk/debug/app-debug.apk). Website/HTML folder ho to pehle WebView wrapper project banao (assets mein HTML copy + WebView MainActivity) phir gradle build. JDK 17 + Android SDK + Gradle chahiye - pehle check karo (java -version, gradle --version), missing ho to install karo ya steps batao.
 - "zip banao" => Windows: powershell Compress-Archive, Linux/Mac: zip -r output.zip folder
@@ -127,7 +133,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'create_automation', description: 'Ek scheduled automation save karo - jo roz 9 AM PKT khud chalegi. prompt = poora kaam jo karna hai (agent khud execute karega, tools ke saath).', parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam, e.g. roz-leads-dhundo' }, prompt: { type: 'string', description: 'poora kaam jo har roz karna hai' }, schedule: { type: 'string', enum: ['daily', 'weekly', 'monthly'], description: 'abhi sirf daily support hai' } }, required: ['name', 'prompt'] } } },
   { type: 'function', function: { name: 'list_automations', description: 'Saari saved automations dikhao (name, prompt, schedule, last_run)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'delete_automation', description: 'Ek saved automation delete karo', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
-  { type: 'function', function: { name: 'run_pc_command', description: 'User ke connected PC/laptop pe terminal command chalao (Windows/Linux). SIRF tab use karo jab user ka PC connected ho - warna batao "pehle Connect PC page se PC connect karo". Commands: file dekhna, projects banana, git, npm, system info waghera.', parameters: { type: 'object', properties: { command: { type: 'string', description: 'shell command, e.g. "dir" (Windows) ya "ls -la" (Linux)' } }, required: ['command'] } } },
+  { type: 'function', function: { name: 'run_pc_command', description: 'User ke CONNECTED DEVICE (laptop/desktop app ya Android phone-Termux) pe terminal command chalao. User bole "PC/laptop/phone pe ye karo", "python install karo", "project banao", "files dikhao" etc to YE use karo. Koi device connected na ho to user ko Setup batao: laptop = Desktop app ya Connect PC; Android = Terminal page > Pairing code > Termux (node mobile-agent.js <code>). Commands OS ke hisab se: Windows (dir), Linux/Android/Termux (ls).', parameters: { type: 'object', properties: { command: { type: 'string', description: 'shell command, e.g. "dir" (Windows), "ls -la" (Linux/Mac/Termux), "pkg install python -y" (Termux)' } }, required: ['command'] } } },
+  { type: 'function', function: { name: 'run_device_tool', description: 'User ke connected DEVICE ke desktop tools chalao cloud se (sirf laptop/desktop app devices pe - Termux phone pe nahi): whatsapp_send, whatsapp_open_chat, whatsapp_web connect/status, youtube open/search/play, chrome open/tabs/close/search, file_list/file_read/file_write. User bole "laptop se WhatsApp bhejo" ya "laptop pe YouTube kholo" to YE use karo.', parameters: { type: 'object', properties: { tool: { type: 'string', description: 'tool ka naam, e.g. whatsapp_send, youtube, chrome, file_list' }, args: { type: 'object', description: 'tool ke arguments, e.g. {to:"naam", text:"message"} ya {query:"search", number:2}' } }, required: ['tool'] } } },
   { type: 'function', function: { name: 'google_request', description: "User ke CONNECTED Google account ka API call — Gmail, Calendar, Drive (token khud manage hota hai). User ne Google account connect kiya ho to 'mere emails padho', 'calendar mein event daalo', 'Drive files dikhao' SAB is tool se karo. url examples: Gmail 'https://gmail.googleapis.com/gmail/v1/users/me/messages', Calendar 'https://www.googleapis.com/calendar/v3/users/me/events', Drive 'https://www.googleapis.com/drive/v3/files'", parameters: { type: 'object', properties: { url: { type: 'string', description: 'poora Google API URL (users/me use karo)' }, method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'] }, body: { type: 'object', description: 'JSON body (POST/PUT/PATCH)' } }, required: ['url'] } } },
   { type: 'function', function: { name: 'whatsapp_connect', description: "User ka APNA WhatsApp Cloud API (Meta) connect karo — per-user. User Meta Business se Permanent Access Token + Phone Number ID dega. Dono encrypted vault mein save hote hain. Baad mein whatsapp_send se user ke number se messages jayenge.", parameters: { type: 'object', properties: { token: { type: 'string', description: 'Meta permanent access token (EAAG...)' }, phone_id: { type: 'string', description: 'Phone Number ID (digits)' } }, required: ['token', 'phone_id'] } } },
   { type: 'function', function: { name: 'whatsapp_status', description: 'Check karo: user ka WhatsApp Cloud API connected hai ya nahi (masked info)', parameters: { type: 'object', properties: {} } } },
@@ -166,8 +173,8 @@ async function callEndpoint(name, body) {
 
 function trunc(s, n = 3500) { s = typeof s === 'string' ? s : JSON.stringify(s); return s.length > n ? s.slice(0, n) + '...[truncated]' : s; }
 
-const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠', whatsapp_connect: '💬', whatsapp_status: '💬', whatsapp_send: '💬' };
-const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'PC pe command chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon', whatsapp_connect: 'WhatsApp Cloud API connect kar raha hoon', whatsapp_status: 'WhatsApp connection check kar raha hoon', whatsapp_send: 'WhatsApp message bhej raha hoon' };
+const STEP_ICON = { audit_website: '🔍', search_businesses: '🔎', score_lead: '📊', clone_site: '📦', build_and_deploy: '🚀', read_emails: '📧', create_automation: '💾', list_automations: '📋', delete_automation: '🗑', run_pc_command: '💻', run_device_tool: '🔧', save_credential: '🔐', list_credentials: '🗂', delete_credential: '🗑', mcp_list_servers: '🔌', mcp_test_server: '🔌', mcp_call_tool: '🔌', api_request: '🌐', google_request: 'G', connect_ai_brain: '🧠', whatsapp_connect: '💬', whatsapp_status: '💬', whatsapp_send: '💬' };
+const STEP_TITLE = { audit_website: 'Website audit kar raha hoon', search_businesses: 'Businesses dhoond raha hoon', score_lead: 'Lead score kar raha hoon', clone_site: 'Website clone kar raha hoon', build_and_deploy: 'Website bana ke deploy kar raha hoon', read_emails: 'Emails padh raha hoon', create_automation: 'Automation save kar raha hoon', list_automations: 'Automations list kar raha hoon', delete_automation: 'Automation delete kar raha hoon', run_pc_command: 'Device pe command chala raha hoon', run_device_tool: 'Device ka tool chala raha hoon', save_credential: 'Token encrypted save kar raha hoon', list_credentials: 'Saved tokens list kar raha hoon', delete_credential: 'Token delete kar raha hoon', mcp_list_servers: 'MCP servers dekh raha hoon', mcp_test_server: 'MCP server se connect kar raha hoon', mcp_call_tool: 'MCP tool chala raha hoon', api_request: 'API call kar raha hoon', google_request: 'Google account se kaam kar raha hoon', connect_ai_brain: 'AI brain connect kar raha hoon', whatsapp_connect: 'WhatsApp Cloud API connect kar raha hoon', whatsapp_status: 'WhatsApp connection check kar raha hoon', whatsapp_send: 'WhatsApp message bhej raha hoon' };
 
 // ---------- bridge (PC) helpers ----------
 async function bridgeApi(action, body) {
@@ -188,36 +195,40 @@ async function bridgeApi(action, body) {
   });
 }
 
-async function getOnlineDevice() {
-  if (process.env.SUPABASE_URL && process.env.SUPABASE_ANON_KEY) {
-    const r = await bridgeApi('devices', {});
-    const list = (r.data && r.data.devices) || [];
-    const online = list.filter(d => d.online);
-    // sab se recent online device
-    online.sort((a, b) => new Date(b.last_seen) - new Date(a.last_seen));
+// device helpers - PER-USER (sirf verified uid ke devices, service key se)
+async function getOnlineDevice(uid) {
+  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  if (!SB_URL || !SB_KEY || !uid) return null;
+  try {
+    const r = await fetch(SB_URL + '/rest/v1/bridge_devices?user_id=eq.' + encodeURIComponent(uid) + '&select=*&order=last_seen.desc', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
+    if (!r.ok) return null;
+    const list = await r.json();
+    const online = list.filter(d => d.status === 'connected' && d.last_seen && (Date.now() - new Date(d.last_seen).getTime()) < 60000);
     return online[0] || null;
-  }
-  return null;
+  } catch (e) { return null; }
 }
 
-async function createBridgeJob(deviceId, type, payload) {
-  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_ANON_KEY;
+async function createBridgeJob(deviceId, type, payload, uid) {
+  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
   const headers = { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY, 'Content-Type': 'application/json', 'Prefer': 'return=representation' };
-  const r = await fetch(SB_URL + '/rest/v1/bridge_jobs', { method: 'POST', headers, body: JSON.stringify({ device_id: deviceId, type, payload, status: 'pending' }) });
+  const r = await fetch(SB_URL + '/rest/v1/bridge_jobs', { method: 'POST', headers, body: JSON.stringify({ device_id: deviceId, user_id: uid, type, payload, status: 'pending' }) });
   if (!r.ok) return null;
   const rows = await r.json();
   return rows[0] ? rows[0].id : null;
 }
 
-async function waitBridgeJob(jobId, maxMs) {
+async function waitBridgeJob(jobId, maxMs, uid) {
+  const SB_URL = process.env.SUPABASE_URL, SB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
   const start = Date.now();
   while (Date.now() - start < maxMs) {
     await new Promise(r => setTimeout(r, 1500));
-    const r = await bridgeApi('job_status', { job_id: jobId });
-    const job = r.data && r.data.job;
-    if (job && (job.status === 'done' || job.status === 'error')) {
-      return job.result || { error: 'no result' };
-    }
+    try {
+      const r = await fetch(SB_URL + '/rest/v1/bridge_jobs?id=eq.' + encodeURIComponent(jobId) + '&select=*', { headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY } });
+      const rows = await r.json();
+      const job = rows[0];
+      if (job && uid && job.user_id !== uid) return { error: 'job tumhara nahi' };
+      if (job && (job.status === 'done' || job.status === 'error')) return job.result || { error: 'no result' };
+    } catch (e) {}
   }
   return null;
 }
@@ -248,12 +259,23 @@ async function runTool(name, args, steps, uid) {
   if (name === 'search_businesses') { epName = 'search'; body = { query: args.query, location: args.location }; }
   if (name === 'create_automation') { epName = 'automations'; body = { action: 'create', name: args.name, prompt: args.prompt, schedule: args.schedule || 'daily' }; }
   if (name === 'run_pc_command') {
-    // connected device dhundo, job banao, bridge ka result wait karo
-    const device = await getOnlineDevice();
-    if (!device) return JSON.stringify({ error: 'Koi PC connected nahi hai. User ko bolo: menu > Connect PC se apna PC/laptop connect karo (node bridge.js <code>).' });
-    const jobId = await createBridgeJob(device.id, 'shell', { command: args.command, cwd: args.cwd });
-    const result = await waitBridgeJob(jobId, 35000);
-    if (result === null) return JSON.stringify({ error: 'PC se jawab nahi aaya (timeout) - bridge chal raha hai? command: ' + args.command });
+    // connected device dhundo (user ka apna - privacy), job banao, result wait karo
+    const device = await getOnlineDevice(uid);
+    if (!device) return JSON.stringify({ error: 'Koi device connected nahi. User ko bolo: (a) laptop pe Desktop app kholo ya Connect PC se pair karo, (b) Android phone pe: Terminal page > "Pairing code lo" > Termux mein node mobile-agent.js <code>. Phir command dobara bolo.' });
+    const jobId = await createBridgeJob(device.id, 'shell', { command: args.command, cwd: args.cwd }, uid);
+    if (!jobId) return JSON.stringify({ error: 'Job create fail - device offline hua shayad' });
+    const result = await waitBridgeJob(jobId, 35000, uid);
+    if (result === null) return JSON.stringify({ error: 'Device se jawab nahi aaya (timeout) - device online hai? command: ' + args.command });
+    return JSON.stringify(result);
+  }
+  if (name === 'run_device_tool') {
+    // user ke connected device ke DESKTOP tools (whatsapp_send, youtube, files...) cloud bridge se
+    const device = await getOnlineDevice(uid);
+    if (!device) return JSON.stringify({ error: 'Koi device connected nahi - pehle Desktop app / mobile agent connect karo' });
+    const jobId = await createBridgeJob(device.id, 'tool', { tool: args.tool, args: args.args || {} }, uid);
+    if (!jobId) return JSON.stringify({ error: 'Job create fail' });
+    const result = await waitBridgeJob(jobId, 60000, uid);
+    if (result === null) return JSON.stringify({ error: 'Device se jawab nahi aaya (timeout) - tool: ' + args.tool });
     return JSON.stringify(result);
   }
   if (name === 'save_credential') { epName = null; const r = await vault.saveCredential(args.name, args.value, args.description, uid); step.status = r.error ? 'error' : 'done'; step.detail = r.error ? String(r.error).slice(0, 120) : (r.saved + ' ' + (r.masked || '')); return JSON.stringify(r); }
@@ -383,19 +405,19 @@ const handler = async (req, res) => {
     if (!process.env.SUPABASE_URL || !process.env.SUPABASE_ANON_KEY) {
       return res.status(500).json({ error: 'Ollama mode ke liye Supabase env vars chahiye (bridge system).' });
     }
-    const rDevices = await bridgeApi('devices', {});
-    const devices = ((rDevices.data && rDevices.data.devices) || []).filter(d => d.online);
-    if (!devices.length) return res.status(400).json({ error: 'Koi PC connected nahi. Menu > Connect PC se apna PC connect karo (Ollama us PC pe hona chahiye).' });
-    const device = device_id ? (devices.find(d => d.id === device_id) || devices[0]) : devices[0];
+    const devAll = await getOnlineDevice(uid);
+    const devices = devAll ? [devAll] : [];
+    if (!devices.length) return res.status(400).json({ error: 'Koi device connected nahi. Laptop: Desktop app / Connect PC. Android: Terminal > Termux setup. (Ollama us device pe hona chahiye.)' });
+    const device = devices[0];
     const chosenModel = model || (device.ollama_models && device.ollama_models[0]);
     if (!chosenModel) return res.status(400).json({ error: 'Is PC pe koi Ollama model nahi mila. "ollama pull llama3.2" chalao.' });
     const jobId = await createBridgeJob(device.id, 'ollama_chat', { model: chosenModel, messages: [
       { role: 'system', content: 'You are Dev Craft Agent. Reply in the same language the user uses (Urdu/Roman Urdu mix is fine). Be helpful, concise.' },
       ...(Array.isArray(history) ? history.slice(-8).map(h => ({ role: h.role, content: h.content })) : []),
       { role: 'user', content: message }
-    ] });
+    ] }, uid);
     if (!jobId) return res.status(500).json({ error: 'Job create nahi hua (bridge_jobs table hai?)' });
-    const result = await waitBridgeJob(jobId, 45000);
+    const result = await waitBridgeJob(jobId, 45000, uid);
     if (result === null) return res.status(504).json({ error: 'PC se jawab nahi aaya - bridge/Ollama chal raha hai?' });
     if (result.error) return res.status(500).json({ error: 'Ollama error: ' + result.error });
     return res.json({ reply: result.reply || '(khali jawab)', steps: [{ title: '🦙 Local Ollama se jawab (' + chosenModel + ')', status: 'done', detail: device.device_name }], links: [] });
