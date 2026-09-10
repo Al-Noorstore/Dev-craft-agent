@@ -283,6 +283,19 @@ RULES:
 \n13. OLLAMA SKILL (local free AI — smart brain): 'konsi AI/models hain' / 'ollama check karo' / 'models dikhao' → ollama {action:'status'} — SAARE downloaded models ki list + active model + download progress milti hai, user ko list dikhao. 'naya model download karo' / 'qwen2.5:3b download karo' → ollama {action:'pull', model} — background download start hota hai, user ko bolo thodi der mein status check ho jayega. 'llama3.2 use karo' / 'qwen wala model use karo' → ollama {action:'select', model}. Ollama install na ho to bolo: Settings (⚙️) mein "Install Ollama (auto)" button dabao (winget/brew se khud install hota hai) ya ollama.com — FREE hai, koi API key nahi chahiye. Ollama = agent ka local brain; baaki SAB powers (terminal, files, WhatsApp, YouTube, automations, chrome) API key ho ya Ollama ho — same kaam karte hain.
 \n12. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
 
+const JARVIS_PROMPT = `
+
+=== JARVIS MODE ACTIVE ===
+Ab tum JARVIS ho (Iron Man style AI). Rules:
+1. Har reply mein user ko "Sir" bulao (start ya end mein).
+2. HAR kaam 2 phases mein karo:
+   PHASE 1 (pehle bolo, phir karo): tool call se PEHLE apna text likho jo tum ab karne wale ho — jaise "Sir, abhi Notepad open karta hoon." ya "Sir, YouTube pe search karta hoon." — phir tool call karo. App tumhara ye message chat mein dikhayega.
+   PHASE 2 (result ke baad): final reply mein confirm karo — "Sir, Notepad open ho gaya hai." / "Sir, search complete — results upar hain."
+3. Tone: aadab wala, confident, robotic-professional — asli JARVIS jaisa. Short replies, koi faltu list ya lecture nahi.
+4. Saare powers same rahenge (terminal, files, apps, YouTube, WhatsApp, web search, automations, ollama) — sirf TONE JARVIS wali ho.
+5. Koi tool na chahiye ho (normal baat cheet) to bhi JARVIS style mein hi baat karo — "Sir, ...".
+Example: "notepad kholo" → Phase 1: "Sir, abhi Notepad open karta hoon." + open_app tool → Phase 2: "Sir, Notepad open ho gaya hai."`;
+
 function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
 
 // ---------- tool executor ----------
@@ -589,7 +602,8 @@ async function runTool(name, args, steps) {
 // ---------- chat (OpenAI ya local Ollama) ----------
 async function chat(req, res, body) {
   res.setHeader('Content-Type', 'application/json');
-  const { message, history, api_key, provider, model, base_url } = body || {};
+  const { message, history, api_key, provider, model, base_url, jarvis } = body || {};
+  const sysPrompt = SYSTEM_PROMPT + (jarvis ? JARVIS_PROMPT : '');
   if (!message) return res.end(JSON.stringify({ error: 'message required' }));
   const steps = [];
 
@@ -598,13 +612,14 @@ async function chat(req, res, body) {
   if (cmdMatch) {
     const out = await sh(cmdMatch[1]);
     steps.push({ title: '⌨ Terminal (direct)', status: out.ok ? 'done' : 'error', detail: (out.output || out.error || 'done').split('\n')[0].slice(0, 60) });
-    return res.end(JSON.stringify({ reply: '```\n' + (out.output || out.error || '(no output)') + '\n```', steps }));
+    const out2 = '```\n' + (out.output || out.error || '(no output)') + '\n```';
+    return res.end(JSON.stringify({ reply: jarvis ? ('Sir, command execute karta hoon.\n' + out2 + '\nSir, command complete ho gayi.') : out2, steps }));
   }
 
   // ---- Ollama (local, free) ----
   if (provider === 'ollama') {
     try {
-      const r = await fetch('http://localhost:11434/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: (ollamaCfg().model || model || 'llama3.2'), messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(history) ? history.slice(-8) : []), { role: 'user', content: message }], stream: false }) });
+      const r = await fetch('http://localhost:11434/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: (ollamaCfg().model || model || 'llama3.2'), messages: [{ role: 'system', content: sysPrompt }, ...(Array.isArray(history) ? history.slice(-8) : []), { role: 'user', content: message }], stream: false }) });
       if (!r.ok) return res.end(JSON.stringify({ error: 'Ollama error (HTTP ' + r.status + ') - model installed? "ollama pull llama3.2"' }));
       const d = await r.json();
       return res.end(JSON.stringify({ reply: (d.message && d.message.content) || '', steps }));
@@ -628,7 +643,8 @@ async function chat(req, res, body) {
   const brainModel = effModel || (provider === 'openrouter' ? 'openrouter/auto' : provider === 'custom' ? 'custom-model' : 'gpt-4o-mini');
   if (!effKey) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) mein apni API key paste karo (OpenAI/OpenRouter/Custom), ya Ollama select karo (free). Ya chat mein key de kar bolo "connect as AI brain".' }));
   if (provider === 'custom' && !base_url && !effUrl) return res.end(JSON.stringify({ error: 'Custom API ke liye Base URL Settings mein daalo' }));
-  const messages = [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
+  const messages = [{ role: 'system', content: sysPrompt }, ...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
+  const jarvisSays = [];
   try {
     let reply = '';
     for (let round = 0; round < 8; round++) {
@@ -640,6 +656,7 @@ async function chat(req, res, body) {
       const d = await r.json();
       const msg = d.choices[0].message;
       if (msg.tool_calls && msg.tool_calls.length) {
+        if (jarvis && msg.content && msg.content.trim()) { jarvisSays.push(msg.content.trim()); steps.push({ title: '🤖 ' + msg.content.trim().slice(0, 60), status: 'active', detail: 'JARVIS' }); }
         messages.push(msg);
         for (const tc of msg.tool_calls) {
           let args = {}; try { args = JSON.parse(tc.function.arguments || '{}'); } catch (e) {}
@@ -651,6 +668,7 @@ async function chat(req, res, body) {
       reply = msg.content || '';
       break;
     }
+    if (jarvis && jarvisSays.length) reply = jarvisSays.join('\n') + '\n' + (reply || 'Sir, task complete.');
     return res.end(JSON.stringify({ reply: reply || 'Kaam ho gaya 👆 (steps upar)', steps }));
   } catch (e) { return res.end(JSON.stringify({ error: 'Network error: ' + e.message })); }
 }

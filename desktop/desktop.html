@@ -67,6 +67,8 @@
   .btn.ghost { background:var(--pill); color:var(--text); }
   .btn.save { background:var(--primary); color:#fff; }
   .mini-btn { background:var(--pill); border:none; border-radius:6px; padding:3px 10px; font-size:11px; cursor:pointer; color:var(--text-muted); margin-top:6px; margin-right:6px; }
+  #jarvisBtn.on { background: linear-gradient(135deg, var(--primary), #7c3aed) !important; color: #fff !important; box-shadow: 0 0 16px rgba(99,102,241,.65); animation: jpulse 2s infinite; border-color: transparent !important; }
+  @keyframes jpulse { 0%,100% { box-shadow: 0 0 10px rgba(99,102,241,.55); } 50% { box-shadow: 0 0 22px rgba(124,58,237,.95); } }
 </style>
 </head>
 <body>
@@ -74,6 +76,7 @@
     <div class="logo">⚡</div>
     <h1>Dev Craft Agent <span style="color:var(--text-faint);font-weight:400">Desktop</span></h1>
     <span id="pcbadge">💻 Your PC</span>
+    <button class="icon-btn" id="jarvisBtn" onclick="toggleJarvis()" title="Jarvis Mode — robot-style responses"><span style="font-size:17px">🤖</span></button>
     <button class="icon-btn" onclick="openMcp()" title="Connect MCP"><span style="font-size:17px">🔌</span></button>
     <button class="icon-btn" onclick="openSettings()" title="Settings"><span style="font-size:17px">⚙️</span></button>
   </div>
@@ -253,6 +256,14 @@
     ollamaRefresh();
   }
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+  function toggleJarvis() {
+    settings.jarvis = !settings.jarvis;
+    localStorage.setItem('dcd_settings', JSON.stringify(settings));
+    const b = document.getElementById('jarvisBtn');
+    b.classList.toggle('on', !!settings.jarvis);
+    b.title = settings.jarvis ? 'Jarvis Mode ACTIVE — robot-style responses' : 'Jarvis Mode';
+  }
+  (function() { const b = document.getElementById('jarvisBtn'); if (settings.jarvis) b.classList.add('on'); })();
   let _ollamaIv = null;
   async function ollamaRefresh() {
     const st = document.getElementById('ollamaStatus'); const sel = document.getElementById('setOllamaModel'); const iw = document.getElementById('ollamaInstallWrap');
@@ -368,7 +379,7 @@
     chat.appendChild(t);
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text, history: history.slice(-10), provider: settings.provider,
+        body: JSON.stringify({ message: text, history: history.slice(-10), jarvis: !!settings.jarvis, provider: settings.provider,
           model: settings.provider === 'ollama' ? settings.ollama_model : (settings.provider === 'openrouter' ? settings.or_model : (settings.provider === 'custom' ? settings.custom_model : settings.model)),
           api_key: settings.provider === 'openrouter' ? settings.or_key : (settings.provider === 'custom' ? settings.custom_key : settings.api_key),
           base_url: settings.base_url })
