@@ -251,6 +251,8 @@ const TOOLS = [
   { type: 'function', function: { name: 'mcp_test_server', description: 'MCP server se connect karke tools ki list lao (server naam do, ya url)', parameters: { type: 'object', properties: { server: { type: 'string' }, url: { type: 'string' } }, required: [] } } },
   { type: 'function', function: { name: 'mcp_call_tool', description: 'Saved MCP server ka koi tool chalao (Supabase, database, docs waghera ka kaam)', parameters: { type: 'object', properties: { server: { type: 'string' }, tool: { type: 'string' }, args: { type: 'object' } }, required: ['server', 'tool'] } } },
   { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } },
+  { type: 'function', function: { name: 'web_search', description: 'Web pe REAL search karo (DuckDuckGo) - results (title, url, snippet) chat mein wapas aate hain, tum unhe padh kar summarize kar sakte ho. Browser mein khulwana ho to chrome {action:"search"} alag hai.', parameters: { type: 'object', properties: { query: { type: 'string', description: 'search query' } }, required: ['query'] } } },
+  { type: 'function', function: { name: 'web_read', description: 'Kisi bhi webpage/URL ka text content padho (HTML strip ho kar seedha text milta hai) - article padhna, price/product dekhna, detail lena.', parameters: { type: 'object', properties: { url: { type: 'string', description: 'poora https:// URL' } }, required: ['url'] } } },
   { type: 'function', function: { name: 'ollama', description: 'Ollama (local free AI) ka manager: status = Ollama install/run hai kya, SAARE downloaded models ki list, active model, aur koi download chal raha ho to progress. pull = naya model background download. select = active model switch.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['status', 'pull', 'select'], description: 'status = check/list, pull = download naya model, select = active model switch' }, model: { type: 'string', description: 'pull/select ke liye model, e.g. llama3.2, qwen2.5:3b, gemma2:2b, phi3:mini' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } },
   { type: 'function', function: { name: 'connect_ai_brain', description: "User ki di hui AI API key ko AGENT KA BRAIN bana do. Jab user chat mein koi AI ki key de + bole 'connect as AI brain' / 'isse socho' / 'ye use karo' to ye chalao. provider: gemini (Google Gemini), openai (ChatGPT), openrouter, groq, deepseek, mistral, anthropic (Claude), custom (base_url chahiye).", parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['gemini', 'openai', 'openrouter', 'groq', 'deepseek', 'mistral', 'anthropic', 'custom'] }, api_key: { type: 'string' }, model: { type: 'string' }, base_url: { type: 'string' } }, required: ['provider', 'api_key'] } } }
@@ -261,6 +263,7 @@ const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - made by Wishal Noor. Ag
 - WHATSAPP WEB (user ke apne number se): whatsapp_web {action:"connect"} → Chrome window khulti hai, user ek BAAR QR scan karta hai (uske baad yaad rehta hai). 'Shahzad ki chat kholo' → whatsapp_open_chat {name}. 'Shahzad ko hi bhejo' / 'Tom ko ye message bhejo' → whatsapp_send {to:"Shahzad", text:"hi"}. Status: whatsapp_web {action:"status"}. Disconnect: whatsapp_web {action:"disconnect"}.
 - WHATSAPP DELETE: 'Shahzad ka last message delete karo' / 'mere uncle ko gaya last message wapas delete karo' → whatsapp_delete {to:'Shahzad', which:1, mode:'everyone'} (naam tum khud chat context se lo — dost/client/uncle jo bhi bola). 'second last' → which:2. 'sirf mere paas se' → mode:'me'. User naam na de to khuli chat ka last message. Delete-for-everyone sirf RECENT messages pe hota hai — bahut purana message pe WhatsApp option nahi deta, user ko batao.
 - YOUTUBE: 'YouTube kholo' → youtube {action:'open'}. 'masihi geet search karo' → youtube {action:'search', query:'masihi geet'} — agar YouTube tab pehle se khula hai to agent USI tab mein search karta hai; user ne 'naye/alag tab mein' bola ho tabhi separate:true. IMPORTANT confirm rule: agar user ne sirf 'search karo' bola aur kahin YouTube ka zikr NAHI hai → EK baar confirm karo: 'YouTube pe search karun ya Google pe?' — lekin agar user ne pehle hi bataya hai 'YouTube pe search karo' / YouTube khulwa hai / YouTube ki hi baat ho rahi hai → confirm MAT karo, seedha YouTube pe search karo. 'Google pe ... dhoondo' → open_app {target: 'https://www.google.com/search?q=' + query}. Search ke baad user 'ab teesra video chalao' / '5th wala chalao' / 'wo pehla wala chalao' bole → youtube {action:'play', number:N} — khuli results list se hi, DOBARA SEARCH MAT KARNA. 'qawali search kar ke teesra chalao' → youtube {action:'play_search', query, number:3} — koi bhi number allowed (1st, 2nd, 5th, 10th).
+- WEB SEARCH (real): 'web pe xyz dhoondo' / 'pata karo XYZ kya hai' / news/info chahiye → web_search {query} — results tumhe milte hain, user ko list/summary do. Kisi result ki detail chahiye → web_read {url} (article/product page ka text padh lo). Browser mein DIKHANA ho to chrome {action:'search'} use karo. Ye internet se live search hai - agent khud padh kar jawab deta hai.
 - CHROME (browser automation): 'khoj.com kholo' → chrome {action:'open', url}. 'Google pe xyz search karo' → chrome {action:'search', query:'xyz'}. 'tabs dikhao' → chrome {action:'tabs'} → numbered list milti hai, 'teensra tab band karo' → chrome {action:'close', target:'3'}. WhatsApp wala tab ye tool kabhi band nahi karta.
 - SYSTEM CHECK / TEST: 'sab check karo', 'test karo', 'kya sab chal raha hai?' → system_check chalao — browser installed/running, khule tabs, WhatsApp Web state, automations ka last-run sab report mein aata hai. User ko simple summary do: kya ready hai, kya karna hai (e.g. 'WhatsApp Web kholo' bol kar QR scan karo).
 - AUTOMATIONS (laptop scheduler): 'Shahzad ko daily 8 baje good morning bhejo' → automation_create {time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!'} — message text TUM khud likho (short, natural). 'automations dikhao' → automation_list. '8 baje wala band karo' → automation_list se id lo → automation_delete ya automation_toggle {enabled:false}. User ko batao: WhatsApp Web connected hona chahiye, aur laptop band raha to laptop khulte hi pending message usi din chala jayega.
@@ -395,6 +398,41 @@ async function runTool(name, args, steps) {
         else { ollamaCfgSet(model); result = { ok: true, active_model: model, models: d.models }; }
         title = '🦙 Model switch: ' + model;
       }
+    }
+    else if (name === 'web_search') {
+      const q = encodeURIComponent(String(args.query || '').slice(0, 300));
+      try {
+        const r = await fetch('https://html.duckduckgo.com/html/?q=' + q, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36', 'Accept-Language': 'en,ur;q=0.8' }, signal: AbortSignal.timeout(20000) });
+        if (!r.ok) { result = { error: 'search HTTP ' + r.status }; }
+        else {
+          const html = await r.text();
+          const results = []; let m;
+          const re = /<a[^>]*class="[^"]*result__a[^"]*"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+          while ((m = re.exec(html)) && results.length < 8) {
+            let url = m[1]; const uddg = /uddg=([^&]+)/.exec(url);
+            if (uddg) url = decodeURIComponent(uddg[1]);
+            results.push({ title: m[2].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").trim(), url });
+          }
+          const sre = /<a[^>]*class="[^"]*result__snippet[^"]*"[^>]*>([\s\S]*?)<\/a>/g;
+          let i = 0; while ((m = sre.exec(html)) && i < results.length) { results[i].snippet = m[1].replace(/<[^>]+>/g, '').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").trim(); i++; }
+          result = { results, note: results.length ? 'web_read {url} se kisi bhi result ka poora content padho' : 'kuch nahi mila - query change karo' };
+        }
+      } catch (e) { result = { error: 'web search fail: ' + String(e.message || e) }; }
+      title = '🔎 Web search: ' + String(args.query || '').slice(0, 40);
+    }
+    else if (name === 'web_read') {
+      const url = String(args.url || '').trim();
+      if (!/^https?:\/\//.test(url)) { result = { error: 'poora URL do (https://...)' }; }
+      else {
+        try {
+          const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36', 'Accept-Language': 'en,ur;q=0.8' }, signal: AbortSignal.timeout(20000) });
+          const ct = r.headers.get('content-type') || '';
+          let text = await r.text();
+          if (/html/.test(ct)) text = text.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&#x27;/g, "'").replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+          result = { url, status: r.status, content: text.slice(0, 5000) };
+        } catch (e) { result = { error: 'read fail: ' + String(e.message || e) }; }
+      }
+      title = '📄 Web read: ' + url.slice(11, 51);
     }
     else if (name === 'system_info') { result = { os: os.type() + ' ' + os.release(), hostname: os.hostname(), user: os.userInfo().username, cpu: os.cpus()[0] && os.cpus()[0].model, ram_gb: Math.round(os.totalmem() / 1024 / 1024 / 1024), freemem_gb: Math.round(os.freemem() / 1024 / 1024 / 1024), uptime_h: Math.round(os.uptime() / 3600) }; title = '💻 System info'; }
     else if (name === 'android_project') {
