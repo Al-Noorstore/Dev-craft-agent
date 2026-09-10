@@ -145,8 +145,15 @@
           <button class="mini-btn" onclick="ollamaQuick(this,'gemma2:2b')">gemma2:2b</button>
           <button class="mini-btn" onclick="ollamaQuick(this,'phi3:mini')">phi3:mini</button>
         </div>
-        <div class="set-hint" id="ollamaPullProg" style="display:none;color:var(--primary)"></div>
-        <div class="set-hint">Install nahi? <b>ollama.com</b> → download → install → phir yahan Refresh. App server khud start karta hai.</div>
+        <div class="set-hint" id="ollamaPullProg" style="display:none;color:var(--primary)">
+          <div style="height:9px;background:var(--pill);border-radius:5px;overflow:hidden;margin:5px 0"><div id="ollamaBar" style="height:100%;width:0%;background:var(--primary);border-radius:5px;transition:width .4s"></div></div>
+          <div id="ollamaBarTxt"></div>
+        </div>
+        <div id="ollamaInstallWrap" style="display:none;margin-top:10px">
+          <button class="mini-btn" style="padding:8px 14px;font-size:12px" onclick="ollamaInstallGo()">🔧 Install Ollama (auto — winget/brew se)</button>
+          <div class="set-hint" id="ollamaInstallProg" style="display:none;color:#d97706"></div>
+          <div class="set-hint">Ya khud: <b>ollama.com</b> → download → install → phir yahan Refresh. (Ollama 100% FREE hai, koi API key nahi chahiye)</div>
+        </div>
       </div>
       <div class="set-actions">
         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:10px">
@@ -248,37 +255,57 @@
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
   let _ollamaIv = null;
   async function ollamaRefresh() {
-    const st = document.getElementById('ollamaStatus'); const sel = document.getElementById('setOllamaModel');
+    const st = document.getElementById('ollamaStatus'); const sel = document.getElementById('setOllamaModel'); const iw = document.getElementById('ollamaInstallWrap');
     try {
       const d = await (await fetch('/api/models')).json();
+      if (iw) iw.style.display = d.installed || d.running ? 'none' : 'block';
+      const active = d.active_model || settings.ollama_model || (d.models && d.models[0]) || 'llama3.2';
       if (d.models && d.models.length) {
-        sel.innerHTML = d.models.map(m => '<option value="' + m + '"' + (m === settings.ollama_model ? ' selected' : '') + '>' + m + '</option>').join('');
-        st.innerHTML = '✅ <b>Ollama chal raha</b> — ' + d.models.length + ' model' + (d.models.length > 1 ? 's' : '') + ' ready';
+        sel.innerHTML = d.models.map(m => '<option value="' + m + '"' + (m === active ? ' selected' : '') + '>' + m + '</option>').join('');
+        st.innerHTML = '✅ <b>Ollama chal raha</b> — ' + d.models.length + ' model' + (d.models.length > 1 ? 's' : '') + ' ready (' + active + ' active)';
       } else if (d.installed) st.innerHTML = '⚠️ Ollama mila lekin server start nahi — "Refresh" dabao (app khud start karta hai) ya Ollama app kholo';
-      else st.innerHTML = '❌ <b>Ollama install nahi</b> — ollama.com se free install karo, phir Refresh';
+      else st.innerHTML = '❌ <b>Ollama install nahi</b> — neeche "Install Ollama (auto)" dabao ya ollama.com';
     } catch (e) { st.textContent = '❌ Check fail: ' + e.message; }
+  }
+  async function ollamaInstallGo() {
+    const prog = document.getElementById('ollamaInstallProg'); prog.style.display = 'block'; prog.textContent = '🔧 Ollama install ho raha hai… (2-10 min, internet speed pe)';
+    try {
+      const r = await fetch('/api/ollama/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const d = await r.json();
+      if (!d.ok) { prog.textContent = '❌ ' + (d.error || 'fail') + ' — khud install karo: ollama.com/download'; return; }
+      const iv = setInterval(async () => {
+        try {
+          const s = await (await fetch('/api/ollama/install_status')).json();
+          if (s.error) { prog.textContent = '❌ ' + s.error + ' — khud install karo: ollama.com/download'; clearInterval(iv); return; }
+          prog.textContent = '🔧 Installing… ' + (s.log || '').split(/[\r\n]+/).filter(Boolean).slice(-1)[0] || '';
+          if (s.done && !s.running) { clearInterval(iv); prog.textContent = '✅ Ollama install ho gaya! Server start hota hai…'; setTimeout(ollamaRefresh, 3000); }
+        } catch (e) {}
+      }, 3000);
+    } catch (e) { prog.textContent = '❌ ' + e.message; }
   }
   function ollamaQuick(btn, m) { document.getElementById('ollamaPullModel').value = m; }
   async function ollamaPullGo() {
     const m = (document.getElementById('ollamaPullModel').value || 'llama3.2').trim();
-    const prog = document.getElementById('ollamaPullProg'); prog.style.display = 'block'; prog.textContent = '⬇️ ' + m + ' shuru…';
+    const prog = document.getElementById('ollamaPullProg'); prog.style.display = 'block';
+    document.getElementById('ollamaBar').style.width = '0%'; document.getElementById('ollamaBarTxt').textContent = '⬇️ ' + m + ' shuru…';
     try {
       const r = await fetch('/api/ollama/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) });
       const d = await r.json();
-      if (!d.ok) { prog.textContent = '❌ ' + d.error; return; }
-      if (d.already) { prog.textContent = '✅ ' + m + ' already installed!'; ollamaRefresh(); return; }
+      if (!d.ok) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + d.error; return; }
+      if (d.already) { document.getElementById('ollamaBar').style.width = '100%'; document.getElementById('ollamaBarTxt').textContent = '✅ ' + m + ' already installed!'; ollamaRefresh(); return; }
       if (_ollamaIv) clearInterval(_ollamaIv);
       _ollamaIv = setInterval(async () => {
         try {
           const s = await (await fetch('/api/ollama/pull_status')).json();
           const st = s.state;
-          if (st && st.error) { prog.textContent = '❌ ' + st.error; clearInterval(_ollamaIv); _ollamaIv = null; return; }
+          if (st && st.error) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + st.error; clearInterval(_ollamaIv); _ollamaIv = null; return; }
           const pct = st ? st.pct : 0; const stat = st ? st.status : '';
-          prog.textContent = '⬇️ ' + m + ': ' + pct + '% — ' + stat + ' (internet speed pe depend, chhota model ~2GB)';
-          if (st && st.done) { clearInterval(_ollamaIv); _ollamaIv = null; prog.textContent = '✅ ' + m + ' download complete! Model list mein aa gaya.'; ollamaRefresh(); }
+          document.getElementById('ollamaBar').style.width = pct + '%';
+          document.getElementById('ollamaBarTxt').textContent = '⬇️ ' + m + ': ' + pct + '% — ' + stat + ' (chhota model ~2GB, speed pe depend)';
+          if (st && st.done) { clearInterval(_ollamaIv); _ollamaIv = null; document.getElementById('ollamaBar').style.width = '100%'; document.getElementById('ollamaBarTxt').textContent = '✅ ' + m + ' download complete! Model list mein aa gaya.'; ollamaRefresh(); }
         } catch (e) {}
       }, 2000);
-    } catch (e) { prog.textContent = '❌ ' + e.message; }
+    } catch (e) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + e.message; }
   }
   function setProvider(p) {
     settings.provider = p;
@@ -302,6 +329,7 @@
     settings.custom_model = document.getElementById('setCustomModel').value.trim();
     settings.ollama_model = document.getElementById('setOllamaModel').value || 'llama3.2';
     localStorage.setItem('dcd_settings', JSON.stringify(settings));
+    if (settings.provider === 'ollama') fetch('/api/ollama/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: settings.ollama_model }) }).catch(() => {});
     closeSettings();
   }
 

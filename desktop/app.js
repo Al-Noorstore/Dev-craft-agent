@@ -14,7 +14,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { exec } = require('child_process');
+const { exec, spawn } = require('child_process');
 const waWeb = require('./wa-web.js');
 const browserCtl = require('./browser.js');
 
@@ -53,6 +53,36 @@ async function ollamaInfo() {
     try { const r2 = await fetch('http://localhost:11434/api/tags'); const d2 = await r2.json(); models = (d2.models || []).map(m => m.name); running = true; } catch (e) {}
   }
   return { installed, running, models };
+}
+const OLLAMA_CFG = path.join(os.homedir(), '.dev-craft', 'ollama.json');
+function ollamaCfg() { try { return JSON.parse(fs.readFileSync(OLLAMA_CFG, 'utf8')); } catch (e) { return {}; } }
+function ollamaCfgSet(model) { try { fs.mkdirSync(path.dirname(OLLAMA_CFG), { recursive: true }); fs.writeFileSync(OLLAMA_CFG, JSON.stringify({ model }, null, 2)); } catch (e) {} }
+async function ollamaPullRequest(model) {
+  model = String(model || 'llama3.2').replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 60) || 'llama3.2';
+  const d = await ollamaInfo();
+  if (!d.installed && !d.running) return { ok: false, error: 'Ollama install nahi — Settings ka "Install Ollama (auto)" button ya ollama.com (free)' };
+  if (!d.running) return { ok: false, error: 'Ollama server start nahi hua — Ollama app kholo ya "ollama serve" chalao' };
+  if (d.models.some(m => m.split(':')[0] === model.split(':')[0])) return { ok: true, already: true, models: d.models, model };
+  ollamaPullStart(model);
+  return { ok: true, started: true, model, note: 'Download background mein chal raha hai — "ollama status" se progress dekho (pct)' };
+}
+let _ollamaInstallState = { running: false, done: false, error: null, log: '' };
+function ollamaInstallStart() {
+  if (_ollamaInstallState.running) return { ok: true, started: true, note: 'install pehle se chal raha hai' };
+  const cmd = IS_WIN ? 'winget install -e --id Ollama.Ollama --accept-source-agreements --accept-package-agreements' : IS_MAC ? 'brew install ollama' : 'curl -fsSL https://ollama.com/install.sh | sh';
+  _ollamaInstallState = { running: true, done: false, error: null, log: '' };
+  try {
+    const p = spawn(cmd, { shell: true, windowsHide: true });
+    p.stdout.on('data', d => { _ollamaInstallState.log = (_ollamaInstallState.log + d.toString()).slice(-1500); });
+    p.stderr.on('data', d => { _ollamaInstallState.log = (_ollamaInstallState.log + d.toString()).slice(-1500); });
+    p.on('error', e => { _ollamaInstallState.running = false; _ollamaInstallState.error = String(e.message || e); });
+    p.on('close', async (code) => {
+      _ollamaInstallState.running = false;
+      if (code === 0) { _ollamaInstallState.done = true; _ollamaServeTried = false; }
+      else _ollamaInstallState.error = 'exit ' + code + ' — ' + _ollamaInstallState.log.slice(-200);
+    });
+    return { ok: true, started: true, cmd };
+  } catch (e) { _ollamaInstallState.running = false; _ollamaInstallState.error = String(e.message || e); return { ok: false, error: _ollamaInstallState.error }; }
 }
 function ollamaPullStart(model) {
   if (ollamaPullState && !ollamaPullState.done && ollamaPullState.model === model) return ollamaPullState;
@@ -221,6 +251,7 @@ const TOOLS = [
   { type: 'function', function: { name: 'mcp_test_server', description: 'MCP server se connect karke tools ki list lao (server naam do, ya url)', parameters: { type: 'object', properties: { server: { type: 'string' }, url: { type: 'string' } }, required: [] } } },
   { type: 'function', function: { name: 'mcp_call_tool', description: 'Saved MCP server ka koi tool chalao (Supabase, database, docs waghera ka kaam)', parameters: { type: 'object', properties: { server: { type: 'string' }, tool: { type: 'string' }, args: { type: 'object' } }, required: ['server', 'tool'] } } },
   { type: 'function', function: { name: 'android_project', description: 'Android ka poora kaam: SDK check karo, NAYA project banao, PURANA project build karo (APK ban jayegi). SDK/JDK/Gradle missing ho to user ko install steps batao.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['check', 'create', 'build'], description: 'check = SDK/JDK/Gradle detect karo; create = naya project template banao; build = gradle se APK banao' }, name: { type: 'string', description: 'project name (create ke liye)' }, package: { type: 'string', description: 'package id, e.g. com.devcraft.myapp' }, path: { type: 'string', description: 'project folder path (build/create ke liye)' } }, required: ['action'] } } },
+  { type: 'function', function: { name: 'ollama', description: 'Ollama (local free AI) ka manager: status = Ollama install/run hai kya, SAARE downloaded models ki list, active model, aur koi download chal raha ho to progress. pull = naya model background download. select = active model switch.', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['status', 'pull', 'select'], description: 'status = check/list, pull = download naya model, select = active model switch' }, model: { type: 'string', description: 'pull/select ke liye model, e.g. llama3.2, qwen2.5:3b, gemma2:2b, phi3:mini' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'package_app', description: 'Folder/app ko CONVERT karo: to_exe = folder ya Node/Python script ko EXE banao; to_apk = Android project ya HTML/website folder ko APK banao (HTML folder ka WebView wrapper app banega).', parameters: { type: 'object', properties: { action: { type: 'string', enum: ['to_exe', 'to_apk'], description: 'to_exe = standalone EXE; to_apk = APK build/convert' }, path: { type: 'string', description: 'folder ya file ka path' }, entry: { type: 'string', description: '(to_exe) main script file, e.g. app.js ya main.py' }, name: { type: 'string', description: '(to_apk) app ka naam' }, package: { type: 'string', description: '(to_apk) package id' } }, required: ['action', 'path'] } } },
   { type: 'function', function: { name: 'connect_ai_brain', description: "User ki di hui AI API key ko AGENT KA BRAIN bana do. Jab user chat mein koi AI ki key de + bole 'connect as AI brain' / 'isse socho' / 'ye use karo' to ye chalao. provider: gemini (Google Gemini), openai (ChatGPT), openrouter, groq, deepseek, mistral, anthropic (Claude), custom (base_url chahiye).", parameters: { type: 'object', properties: { provider: { type: 'string', enum: ['gemini', 'openai', 'openrouter', 'groq', 'deepseek', 'mistral', 'anthropic', 'custom'] }, api_key: { type: 'string' }, model: { type: 'string' }, base_url: { type: 'string' } }, required: ['provider', 'api_key'] } } }
 ];
@@ -244,6 +275,7 @@ RULES:
 7. File paths mein spaces ho to quotes use karo.\n8. ANDROID: android_project tool use karo - pehle action check se SDK/JDK/Gradle verify karo, phir create se naya project banao, file_write se purana project EDIT karo, phir build se APK banao (build 5-10 min lag sakta hai).\n9. CREDENTIALS SKILL (Solene-style): user jo bhi token/key de (GitHub, OpenAI, Stripe...) turant credential_save se save karo. "mere tokens dikhao" => credential_list, "hatao" => credential_delete (confirm pehle). Saved token kisi command mein chahiye to {{NAME}} placeholder use karo, e.g. git push ke liye: run_command "git push https://x-access-token:{{GITHUB_TOKEN}}@github.com/user/repo.git" - placeholder khud replace hota hai. Token kabhi plain reply mein mat likhna - sirf masked (pehle 4 + aakhri 4 chars).
 \n11. AUTH SKILL (website mein login laga do): user bole "auth/login/Google login laga do" to Supabase Auth recipe use karo. Google login ke liye: supabase.com pe project + Google Cloud Console pe OAuth client (redirect URI: https://PROJECT_REF.supabase.co/auth/v1/callback) + Supabase > Authentication > Providers > Google ON. supabase-js SELF-HOST karo (jsdelivr CDN Pakistan mein fail hota hai). ANON key frontend mein SAFE hai (RLS ON karo, policy auth.uid()=user_id - har user ka data alag), service_role key KABHI frontend mein nahi. Login: sb.auth.signInWithOAuth({provider:'google',options:{redirectTo:location.origin}}); session onAuthStateChange se track karo. Google ka jhanjhat na ho to email-password login offer karo (Supabase default ON).\n10. MCP SKILL: user ke saved MCP servers mcp_list_servers se dekho, mcp_test_server se tools jano, aur mcp_call_tool se kaam karo (Supabase/database/docs — jo bhi server offer karta hai). Server add karna ho to bolo: "MCP button (🔌) se add karo - naam, URL, optional token".
 \n11. AI BRAIN: user chat mein AI ki API key de (e.g. "ye Gemini ki key hai") + bole "connect as AI brain" / "isse socho" → connect_ai_brain chalao (Gemini→gemini, ChatGPT/OpenAI→openai, Claude→anthropic, Groq→groq, DeepSeek→deepseek, Mistral→mistral, OpenRouter→openrouter). Confirm karo: "✅ <AI> ab mera brain hai". Key de lekin kya karna bata na bole to poochho: "AI brain banaun ya sirf save karun?" "brain disconnect" → delete_credential BRAIN_API_KEY.
+\n13. OLLAMA SKILL (local free AI — smart brain): 'konsi AI/models hain' / 'ollama check karo' / 'models dikhao' → ollama {action:'status'} — SAARE downloaded models ki list + active model + download progress milti hai, user ko list dikhao. 'naya model download karo' / 'qwen2.5:3b download karo' → ollama {action:'pull', model} — background download start hota hai, user ko bolo thodi der mein status check ho jayega. 'llama3.2 use karo' / 'qwen wala model use karo' → ollama {action:'select', model}. Ollama install na ho to bolo: Settings (⚙️) mein "Install Ollama (auto)" button dabao (winget/brew se khud install hota hai) ya ollama.com — FREE hai, koi API key nahi chahiye. Ollama = agent ka local brain; baaki SAB powers (terminal, files, WhatsApp, YouTube, automations, chrome) API key ho ya Ollama ho — same kaam karte hain.
 \n12. CONVERT/PACKAGE (package_app tool): folder ya script ko EXE banao (Node -> pkg, Python -> pyinstaller, koi bhi folder -> 7-Zip self-extracting EXE). Website/HTML folder ko APK banao (WebView wrapper + gradle build). Bade builds mein timeout 600 use karo.`.replace('__OS__', IS_WIN ? 'Windows' : IS_MAC ? 'macOS' : 'Linux');
 
 function cd(d) { return (IS_WIN ? 'cd /d "' + d + '" && ' : 'cd "' + d + '" && '); }
@@ -346,6 +378,23 @@ async function runTool(name, args, steps) {
       if (!cfg) { result = { error: 'MCP server nahi mila: ' + n }; }
       else { try { result = await mcpCallToolFn(cfg.url, cfg.token, args.tool, args.args || {}); } catch (e) { result = { error: e.message.slice(0, 200) }; } }
       title = '🔌 MCP tool: ' + (args.tool || '');
+    }
+    else if (name === 'ollama') {
+      if (args.action === 'status') {
+        const d = await ollamaInfo();
+        result = { installed: d.installed, running: d.running, models: d.models, active_model: ollamaCfg().model || 'llama3.2', download_progress: ollamaPullState, install_progress: _ollamaInstallState.running ? 'installing ollama...' : undefined };
+        if (!d.installed && !d.running) result.tip = 'Ollama install nahi — Settings (⚙️) mein "Install Ollama (auto)" button hai, ya ollama.com se. Bina iske bhi OpenAI/OpenRouter key ya free cloud se chal sakta hai.';
+        title = '🦙 Ollama: ' + (d.running ? d.models.length + ' model(s) ready' : (d.installed ? 'server band (app khud start karegi)' : 'install nahi'));
+      } else if (args.action === 'pull') {
+        result = await ollamaPullRequest(args.model); title = '🦙 Model download: ' + String(args.model || 'llama3.2');
+      } else if (args.action === 'select') {
+        const model = String(args.model || '').trim();
+        const d = await ollamaInfo();
+        if (!d.running) result = { error: 'Ollama chal nahi raha — pehle status/install check karo' };
+        else if (!d.models.some(m => m.split(':')[0] === model.split(':')[0])) result = { error: 'Model installed nahi: ' + model + ' — pehle ollama pull karo. Installed: ' + (d.models.join(', ') || 'koi nahi') };
+        else { ollamaCfgSet(model); result = { ok: true, active_model: model, models: d.models }; }
+        title = '🦙 Model switch: ' + model;
+      }
     }
     else if (name === 'system_info') { result = { os: os.type() + ' ' + os.release(), hostname: os.hostname(), user: os.userInfo().username, cpu: os.cpus()[0] && os.cpus()[0].model, ram_gb: Math.round(os.totalmem() / 1024 / 1024 / 1024), freemem_gb: Math.round(os.freemem() / 1024 / 1024 / 1024), uptime_h: Math.round(os.uptime() / 3600) }; title = '💻 System info'; }
     else if (name === 'android_project') {
@@ -509,7 +558,7 @@ async function chat(req, res, body) {
   // ---- Ollama (local, free) ----
   if (provider === 'ollama') {
     try {
-      const r = await fetch('http://localhost:11434/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: model || 'llama3.2', messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(history) ? history.slice(-8) : []), { role: 'user', content: message }], stream: false }) });
+      const r = await fetch('http://localhost:11434/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: (ollamaCfg().model || model || 'llama3.2'), messages: [{ role: 'system', content: SYSTEM_PROMPT }, ...(Array.isArray(history) ? history.slice(-8) : []), { role: 'user', content: message }], stream: false }) });
       if (!r.ok) return res.end(JSON.stringify({ error: 'Ollama error (HTTP ' + r.status + ') - model installed? "ollama pull llama3.2"' }));
       const d = await r.json();
       return res.end(JSON.stringify({ reply: (d.message && d.message.content) || '', steps }));
@@ -729,8 +778,9 @@ http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
   if (req.method === 'GET' && req.url === '/api/credentials') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(vaultList())); }
   if (req.method === 'GET' && req.url === '/api/bridge/status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(bridgeStatus())); }
-  if (req.method === 'GET' && req.url === '/api/models') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running }))).catch(() => res.end(JSON.stringify({ models: [], installed: false, running: false }))); return; }
+  if (req.method === 'GET' && req.url === '/api/models') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running, active_model: ollamaCfg().model }))).catch(() => res.end(JSON.stringify({ models: [], installed: false, running: false }))); return; }
   if (req.method === 'GET' && req.url === '/api/ollama/pull_status') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ state: ollamaPullState, models: d.models, running: d.running }))).catch(() => res.end(JSON.stringify({ state: ollamaPullState, models: [], running: false }))); return; }
+  if (req.method === 'GET' && req.url === '/api/ollama/install_status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(_ollamaInstallState)); }
   if (req.method === 'POST') {
     let buf = '';
     req.on('data', c => buf += c);
@@ -741,15 +791,16 @@ http.createServer((req, res) => {
         try { const d = await ollamaInfo(); return res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running })); }
         catch (e) { return res.end(JSON.stringify({ models: [], installed: false, running: false })); }
       }
-      if (req.url === '/api/ollama/pull') {
-        const model = String(body.model || 'llama3.2').replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 60) || 'llama3.2';
+      if (req.url === '/api/ollama/pull') return res.end(JSON.stringify(await ollamaPullRequest(body.model)));
+      if (req.url === '/api/ollama/select') {
+        const model = String(body.model || '').trim();
         const d = await ollamaInfo();
-        if (!d.installed && !d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama install nahi — ollama.com se install karo (free), phir ye button dobara dabao' }));
-        if (!d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama server start nahi hua — Ollama app kholo ya "ollama serve" chalao, phir try karo' }));
-        if (d.models.some(m => m.split(':')[0] === model.split(':')[0])) return res.end(JSON.stringify({ ok: true, already: true, models: d.models, model }));
-        ollamaPullStart(model);
-        return res.end(JSON.stringify({ ok: true, started: true, model }));
+        if (!d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama chal nahi raha' }));
+        if (!d.models.some(m => m.split(':')[0] === model.split(':')[0])) return res.end(JSON.stringify({ ok: false, error: 'Model installed nahi: ' + model }));
+        ollamaCfgSet(model);
+        return res.end(JSON.stringify({ ok: true, active_model: model }));
       }
+      if (req.url === '/api/ollama/install') return res.end(JSON.stringify(ollamaInstallStart()));
       if (req.url === '/api/ping') return res.end(JSON.stringify({ ok: true, app: 'Dev Craft Desktop v1', os: os.type() }));
       if (req.url === '/api/exec') {
         try {
