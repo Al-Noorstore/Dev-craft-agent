@@ -238,7 +238,7 @@ const TOOLS = [
   { type: 'function', function: { name: 'whatsapp_delete', description: "WhatsApp Web se TUMHARA bheja hua message DELETE karo. to = kis chat ka (naam, optional — agar nahi do to abhi khuli chat). which = kaunsa message: 1 = last sent (default), 2 = second-last sent... mode = 'everyone' (sab ke liye delete, default) ya 'me' (sirf apne paas se). e.g. 'Shahzad ka last message delete karo' → to='Shahzad', which=1. Note: delete-for-everyne sirf recent messages pe hota hai (purana message nahi hoga).", parameters: { type: 'object', properties: { to: { type: 'string' }, which: { type: 'number', description: '1 = last sent, 2 = second-last sent' }, mode: { type: 'string', enum: ['everyone', 'me'] } }, required: [] } } },
   { type: 'function', function: { name: 'chrome', description: "Chrome browser AUTOMATION: koi bhi website kholo, khule tabs dikhao, tab band karo, ya Google search karo. Website same-site tab khula ho to wahi reuse hota hai. WhatsApp Web wala tab is tool se kabhi band/touch NAHI hota.", parameters: { type: 'object', properties: { action: { type: 'string', enum: ['open', 'tabs', 'close', 'search'], description: 'open = website kholo (url do), tabs = saare tabs ki numbered list, close = tab band (target: number ya naam/keyword), search = Google pe search (query do)' }, url: { type: 'string' }, query: { type: 'string' }, target: { type: 'string', description: 'close ke liye: tab number (1, 2, 3...) ya title/URL ka keyword' } }, required: ['action'] } } },
   { type: 'function', function: { name: 'system_check', description: "Sabhi powers CHECK aur TEST karo — ek full diagnostic: Chrome/Edge installed hai? automation browser chal raha hai? kaunse tabs khule hain? WhatsApp Web connected/QR done? automations ka schedule + last-run status? Report ke hisaab se user ko batao kya theek hai aur kya karna hai.", parameters: { type: 'object', properties: {} } } },
-  { type: 'function', function: { name: 'automation_create', description: "Local AUTOMATION banao (laptop scheduler, laptop time ke hisab se). 'Shahzad ko daily 8 baje good morning message bhejo' → time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!' (text tum khud likho — short + natural). Laptop band raha to laptop khulte hi pending message usi din chala jayega.", parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam (optional)' }, time: { type: 'string', description: 'HH:MM 24h, e.g. 08:00 ya 20:30' }, repeat: { type: 'string', enum: ['daily', 'once'] }, to: { type: 'string', description: 'WhatsApp naam (jaisa WhatsApp mein hai)' }, text: { type: 'string', description: 'jo message bhejna hai' } }, required: ['time', 'to', 'text'] } } },
+  { type: 'function', function: { name: 'automation_create', description: "Local AUTOMATION banao (laptop scheduler, laptop time ke hisab se). Do type: (a) WhatsApp message — 'Shahzad ko daily 8 baje good morning bhejo' → {time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!'}; (b) LAPTOP/TERMINAL automation — 'roz raat 10 baje temp folder clean karo' → {time:'22:00', repeat:'daily', command:'del /q %TEMP%\\*'} (koi bhi terminal command schedule ho jati hai — files backup, scripts, cleanup, reports). Laptop band raha to laptop khulte hi pending kaam usi din chala jayega.", parameters: { type: 'object', properties: { name: { type: 'string', description: 'chhota naam (optional)' }, time: { type: 'string', description: 'HH:MM 24h, e.g. 08:00 ya 20:30' }, repeat: { type: 'string', enum: ['daily', 'once'] }, to: { type: 'string', description: 'WhatsApp naam (jaisa WhatsApp mein hai)' }, text: { type: 'string', description: 'jo message bhejna hai' } }, required: ['time'] } } },
   { type: 'function', function: { name: 'automation_list', description: 'Saari saved automations dikhao (last run ke status ke saath)', parameters: { type: 'object', properties: {} } } },
   { type: 'function', function: { name: 'automation_delete', description: 'Automation delete karo (id automation_list se milega)', parameters: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] } } },
   { type: 'function', function: { name: 'automation_toggle', description: 'Automation ON/OFF karo (bina delete kiye rokna)', parameters: { type: 'object', properties: { id: { type: 'string' }, enabled: { type: 'boolean' } }, required: ['id', 'enabled'] } } },
@@ -266,7 +266,9 @@ const SYSTEM_PROMPT = `You are Dev Craft Agent DESKTOP - made by Wishal Noor. Ag
 - WEB SEARCH (real): 'web pe xyz dhoondo' / 'pata karo XYZ kya hai' / news/info chahiye → web_search {query} — results tumhe milte hain, user ko list/summary do. Kisi result ki detail chahiye → web_read {url} (article/product page ka text padh lo). Browser mein DIKHANA ho to chrome {action:'search'} use karo. Ye internet se live search hai - agent khud padh kar jawab deta hai.
 - CHROME (browser automation): 'khoj.com kholo' → chrome {action:'open', url}. 'Google pe xyz search karo' → chrome {action:'search', query:'xyz'}. 'tabs dikhao' → chrome {action:'tabs'} → numbered list milti hai, 'teensra tab band karo' → chrome {action:'close', target:'3'}. WhatsApp wala tab ye tool kabhi band nahi karta.
 - SYSTEM CHECK / TEST: 'sab check karo', 'test karo', 'kya sab chal raha hai?' → system_check chalao — browser installed/running, khule tabs, WhatsApp Web state, automations ka last-run sab report mein aata hai. User ko simple summary do: kya ready hai, kya karna hai (e.g. 'WhatsApp Web kholo' bol kar QR scan karo).
-- AUTOMATIONS (laptop scheduler): 'Shahzad ko daily 8 baje good morning bhejo' → automation_create {time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!'} — message text TUM khud likho (short, natural). 'automations dikhao' → automation_list. '8 baje wala band karo' → automation_list se id lo → automation_delete ya automation_toggle {enabled:false}. User ko batao: WhatsApp Web connected hona chahiye, aur laptop band raha to laptop khulte hi pending message usi din chala jayega.
+- AUTOMATIONS (laptop scheduler): (a) WhatsApp: 'Shahzad ko daily 8 baje good morning bhejo' → automation_create {time:'08:00', repeat:'daily', to:'Shahzad', text:'Good morning!'} (b) TERMINAL/laptop automation: 'roz raat 10 baje temp folder clean karo' / 'har roz backup script chalao' → automation_create {time:'22:00', repeat:'daily', command:'<terminal command>'} — koi bhi command schedule ho jati hai (cleanup, backup, reports, scripts, file moves). — message text TUM khud likho (short, natural). 'automations dikhao' → automation_list. '8 baje wala band karo' → automation_list se id lo → automation_delete ya automation_toggle {enabled:false}. User ko batao: WhatsApp Web connected hona chahiye, aur laptop band raha to laptop khulte hi pending message usi din chala jayega.
+
+- DEV POWERS (tum ek developer ho bhi): code likhna → file_write (poori file, complete code). Bug fix karna → file_read se code padho, error samjho, file_write se fixed version likho, run_command se test chalao (node file.js / npm test / python file.py). Naya tool/script banana → file_write se banao aur run_command se test karo. Project banana/build → package_app (EXE/APK) ya android_project. Testing → 'sab check karo' pe system_check (browser, WhatsApp, automations, ollama, web search, cloud bridge — sab ek report mein). Ye sab tumhari apni laptop pe hota hai — full control hai.
 
 RULES:
 1. User Roman Urdu/Urdu/English mein baat karega - usi language mein jawab do (Roman Urdu mix theek hai).
@@ -314,9 +316,11 @@ async function runTool(name, args, steps) {
     else if (name === 'system_check') {
       const chk = await browserCtl.browserCheck();
       let wa = {}; try { wa = await waWeb.action('status'); } catch (e) { wa = { error: String(e.message || e) }; }
-      const autos = autosLoad().map(a => ({ name: a.name, time: a.time, repeat: a.repeat, enabled: a.enabled !== false, last_fired: a.last_fired, last_ok: a.last_ok }));
-      result = { ok: true, browser: chk, whatsapp_web: wa, automations: { total: autos.length, list: autos }, checked_at: new Date().toISOString() };
-      title = '🔍 System check: browser ' + (chk.automation_browser_running ? 'ON' : 'OFF') + ', WhatsApp ' + ((wa.logged_in || (wa.status && wa.status.logged_in)) ? 'connected' : 'not connected');
+      const autos = autosLoad().map(a => ({ name: a.name, time: a.time, repeat: a.repeat, tool: a.tool, enabled: a.enabled !== false, last_fired: a.last_fired, last_ok: a.last_ok }));
+      const ol = await ollamaInfo();
+      let web = { ok: false }; try { const wr = await fetch('https://html.duckduckgo.com/html/?q=test', { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(10000) }); web = { ok: wr.ok }; } catch (e) { web = { ok: false, error: String(e.message || e) }; }
+      result = { ok: true, browser: chk, whatsapp_web: wa, automations: { total: autos.length, list: autos }, ollama: { installed: ol.installed, running: ol.running, models: ol.models.length, active_model: ollamaCfg().model }, cloud_bridge: bridgeStatus(), web_search: web, checked_at: new Date().toISOString() };
+      title = '🔍 System check: browser ' + (chk.automation_browser_running ? 'ON' : 'OFF') + ', WhatsApp ' + ((wa.logged_in || (wa.status && wa.status.logged_in)) ? 'connected' : 'not connected') + ', Ollama ' + (ol.running ? ol.models.length + ' models' : 'off') + ', web ' + (web.ok ? 'OK' : 'FAIL');
     }
     else if (name === 'whatsapp_web') { result = await waWeb.action(args.action); title = '💬 WhatsApp Web: ' + String(args.action); if (result.qr) title = '💬 WhatsApp Web: QR scan karo (window mein)'; }
     else if (name === 'whatsapp_open_chat') { result = await waWeb.openChat(args.name); title = '💬 Chat khola: ' + String(args.name).slice(0, 30); }
@@ -324,16 +328,20 @@ async function runTool(name, args, steps) {
     else if (name === 'whatsapp_delete') { result = await waWeb.deleteMsg(args.to, { which: args.which, mode: args.mode }); title = '🗑 WhatsApp delete' + (args.to ? ' → ' + String(args.to).slice(0, 25) : '') + (result.ok ? ' ✓' : ''); }
     else if (name === 'automation_create') {
       const tm = /^(\d{1,2}):(\d{2})$/.exec(String(args.time || '').trim());
-      const to = String(args.to || '').trim(), txt = String(args.text || '').trim();
       if (!tm) result = { error: 'time HH:MM mein do, e.g. 08:00' };
-      else if (!to || !txt) result = { error: 'to (naam) aur text dono chahiye' };
       else {
         const t = tm[1].padStart(2, '0') + ':' + tm[2];
-        const list = autosLoad();
-        const a = { id: 'auto_' + Date.now(), name: args.name || (to + ' @ ' + t), time: t, repeat: args.repeat === 'once' ? 'once' : 'daily', tool: 'whatsapp_send', args: { to: to, text: txt }, enabled: true, created: new Date().toISOString(), last_fired: null, last_ok: null };
-        list.push(a); autosSave(list);
-        result = { ok: true, automation: a, note: 'Har din ' + t + ' laptop time pe chalega. WhatsApp Web connected hona chahiye. Laptop band raha to khulte hi usi din chala jayega.' };
-        title = '⏰ Automation banayi: ' + a.name;
+        const to = String(args.to || '').trim(), txt = String(args.text || '').trim(), cmd = String(args.command || '').trim();
+        let tool = 'whatsapp_send', aargs = { to, text: txt }, aname = args.name || (to + ' @ ' + t), note = 'Har din ' + t + ' laptop time pe chalega. WhatsApp Web connected hona chahiye. Laptop band raha to khulte hi usi din chala jayega.';
+        if (cmd) { tool = 'run_command'; aargs = { command: cmd }; aname = args.name || ('cmd @ ' + t); note = 'Har din ' + t + ' laptop time pe ye command chalegi. Laptop band raha to khulte hi usi din chal jayegi.'; }
+        else if (!to || !txt) { result = { error: 'ya to command (terminal automation) do, ya WhatsApp ke liye to + text dono' }; title = '⏰ Automation fail'; }
+        if (!result) {
+          const list = autosLoad();
+          const a = { id: 'auto_' + Date.now(), name: aname, time: t, repeat: args.repeat === 'once' ? 'once' : 'daily', tool, args: aargs, enabled: true, created: new Date().toISOString(), last_fired: null, last_ok: null };
+          list.push(a); autosSave(list);
+          result = { ok: true, automation: { id: a.id, name: a.name, time: a.time, repeat: a.repeat, tool: a.tool }, note };
+          title = '⏰ Automation banayi: ' + a.name;
+        }
       }
     }
     else if (name === 'automation_list') { const l = autosLoad(); result = { automations: l, total: l.length }; title = '⏰ Automations: ' + l.length; }
