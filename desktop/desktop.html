@@ -67,6 +67,8 @@
   .btn.ghost { background:var(--pill); color:var(--text); }
   .btn.save { background:var(--primary); color:#fff; }
   .mini-btn { background:var(--pill); border:none; border-radius:6px; padding:3px 10px; font-size:11px; cursor:pointer; color:var(--text-muted); margin-top:6px; margin-right:6px; }
+  #mic.listening { background: #e0453b !important; color: #fff !important; animation: jpulse-red 1.2s infinite; }
+  @keyframes jpulse-red { 0%,100% { box-shadow: 0 0 8px rgba(224,69,59,.6); } 50% { box-shadow: 0 0 20px rgba(224,69,59,1); } }
   #jarvisBtn.on { background: linear-gradient(135deg, var(--primary), #7c3aed) !important; color: #fff !important; box-shadow: 0 0 16px rgba(99,102,241,.65); animation: jpulse 2s infinite; border-color: transparent !important; }
   @keyframes jpulse { 0%,100% { box-shadow: 0 0 10px rgba(99,102,241,.55); } 50% { box-shadow: 0 0 22px rgba(124,58,237,.95); } }
 </style>
@@ -96,6 +98,17 @@
     </div>
   </div>
   <div id="inputbar">
+    <button id="mic" class="icon-btn" onclick="toggleMic()" title="🎤 Bolo — live sunta hai (multi-language)">🎤</button>
+    <select id="voiceLang" title="Bolne ki language" style="max-width:86px;font-size:12px;padding:4px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text)">
+      <option value="auto">🌐 Auto</option>
+      <option value="ur-PK">اردو</option>
+      <option value="en-US">English</option>
+      <option value="hi-IN">हिन्दी</option>
+      <option value="ar-SA">العربية</option>
+      <option value="pa-IN">ਪੰਜਾਬੀ</option>
+      <option value="bn-IN">বাংলা</option>
+      <option value="fa-IR">فارسی</option>
+    </select>
     <textarea id="input" rows="1" placeholder="Kuch bhi karo... (Roman Urdu chalti hai)"></textarea>
     <button id="send" onclick="send()">↑</button>
   </div>
@@ -369,6 +382,45 @@
     chat.scrollTop = chat.scrollHeight;
   }
 
+  // ====== VOICE: live mic (multi-language) + Jarvis TTS ======
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  let recognition = null, listening = false;
+  function detectLangOf(text) {
+    if (/[\u0A00-\u0A7F]/.test(text)) return 'pa-IN';
+    if (/[\u0980-\u09FF]/.test(text)) return 'bn-IN';
+    if (/[\u0900-\u097F]/.test(text)) return 'hi-IN';
+    if (/[\u0600-\u06FF]/.test(text)) return /[\u0679\u0688\u0691\u06BA\u06BE\u06BB\u06D2\u06C3]/.test(text) ? 'ur-PK' : 'ar-SA';
+    return 'en-US';
+  }
+  function getVoiceLang(sample) {
+    const sel = document.getElementById('voiceLang') ? document.getElementById('voiceLang').value : 'auto';
+    if (sel && sel !== 'auto') return sel;
+    return detectLangOf(sample || (input && input.value) || '');
+  }
+  if (SR) {
+    recognition = new SR();
+    recognition.interimResults = false;
+    recognition.onresult = e => { input.value = e.results[0][0].transcript; send(); };
+    recognition.onend = () => { listening = false; document.getElementById('mic').classList.remove('listening'); };
+    recognition.onerror = () => { listening = false; document.getElementById('mic').classList.remove('listening'); };
+  }
+  function toggleMic() {
+    if (!recognition) { alert('Is browser mein mic support nahi — Chrome/Edge use karo'); return; }
+    if (listening) { recognition.stop(); return; }
+    try { recognition.lang = getVoiceLang(); } catch (e) {}
+    listening = true;
+    document.getElementById('mic').classList.add('listening');
+    try { recognition.start(); } catch (e) { listening = false; document.getElementById('mic').classList.remove('listening'); }
+  }
+  function jarvisSpeak(text) {
+    if (!settings.jarvis || !('speechSynthesis' in window)) return;
+    const clean = String(text || '').replace(/```[\s\S]*?```/g, ' code block. ').replace(/[*_#>`]/g, '').trim();
+    if (!clean) return;
+    const u = new SpeechSynthesisUtterance(clean.length > 400 ? clean.slice(0, 400) + '...' : clean);
+    u.lang = getVoiceLang(clean);
+    u.rate = 1; u.pitch = 0.8; // thoda robotic-deep
+    try { speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) {}
+  }
   async function send() {
     const text = input.value.trim();
     if (!text || busy) return;
@@ -388,6 +440,7 @@
       t.remove();
       addSteps(d.steps);
       addMsg(d.reply || d.error || 'Error', 'bot');
+      jarvisSpeak(d.reply || '');
     } catch (e) { t.remove(); addMsg('Error: ' + e.message, 'bot'); }
     busy = false; document.getElementById('send').disabled = false;
   }
