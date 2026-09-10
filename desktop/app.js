@@ -30,6 +30,60 @@ function sh(command, timeoutMs = 30000) {
     });
   });
 }
+// ---------- OLLAMA: auto-detect + auto-start + one-click model download ----------
+let _ollamaServeTried = false;
+let ollamaPullState = null;
+async function ollamaInfo() {
+  let running = false, models = [];
+  try {
+    const r = await fetch('http://localhost:11434/api/tags');
+    const d = await r.json();
+    models = (d.models || []).map(m => m.name);
+    running = true;
+  } catch (e) {}
+  let installed = false;
+  try {
+    const v = await sh(IS_WIN ? 'ollama --version 2>nul' : 'ollama --version 2>/dev/null', 8000);
+    installed = v.ok && !/not recognized|not found|command not found|no such file/i.test(v.output || '');
+  } catch (e) {}
+  if (installed && !running && !_ollamaServeTried) {
+    _ollamaServeTried = true;
+    try { await sh(IS_WIN ? 'start /b ollama serve > nul 2>&1' : 'nohup ollama serve > /dev/null 2>&1 &', 5000); } catch (e) {}
+    await new Promise(r => setTimeout(r, 2500));
+    try { const r2 = await fetch('http://localhost:11434/api/tags'); const d2 = await r2.json(); models = (d2.models || []).map(m => m.name); running = true; } catch (e) {}
+  }
+  return { installed, running, models };
+}
+function ollamaPullStart(model) {
+  if (ollamaPullState && !ollamaPullState.done && ollamaPullState.model === model) return ollamaPullState;
+  ollamaPullState = { model, pct: 0, status: 'starting', done: false, error: null };
+  (async () => {
+    try {
+      const r = await fetch('http://localhost:11434/api/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: true }) });
+      if (!r.ok) { const t = await r.text(); ollamaPullState.error = 'HTTP ' + r.status + ' ' + t.slice(0, 200); ollamaPullState.done = true; return; }
+      const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        let i;
+        while ((i = buf.indexOf('\n')) >= 0) {
+          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+          if (!line) continue;
+          try {
+            const d = JSON.parse(line);
+            if (d.error) { ollamaPullState.error = String(d.error); ollamaPullState.done = true; return; }
+            if (d.status) ollamaPullState.status = d.status;
+            if (d.total && d.completed) ollamaPullState.pct = Math.round(d.completed / d.total * 100);
+            if (d.status === 'success') { ollamaPullState.done = true; ollamaPullState.pct = 100; }
+          } catch (e) {}
+        }
+      }
+      if (!ollamaPullState.done && !ollamaPullState.error) ollamaPullState.done = true;
+    } catch (e) { ollamaPullState.error = String(e.message || e); ollamaPullState.done = true; }
+  })();
+  return ollamaPullState;
+}
 function openTarget(target) {
   if (IS_WIN) return sh('start "" "' + target.replace(/"/g, '') + '"', 8000);
   if (IS_MAC) return sh('open "' + target.replace(/"/g, '') + '"', 8000);
@@ -675,6 +729,8 @@ http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
   if (req.method === 'GET' && req.url === '/api/credentials') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(vaultList())); }
   if (req.method === 'GET' && req.url === '/api/bridge/status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(bridgeStatus())); }
+  if (req.method === 'GET' && req.url === '/api/models') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running }))).catch(() => res.end(JSON.stringify({ models: [], installed: false, running: false }))); return; }
+  if (req.method === 'GET' && req.url === '/api/ollama/pull_status') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ state: ollamaPullState, models: d.models, running: d.running }))).catch(() => res.end(JSON.stringify({ state: ollamaPullState, models: [], running: false }))); return; }
   if (req.method === 'POST') {
     let buf = '';
     req.on('data', c => buf += c);
@@ -682,8 +738,17 @@ http.createServer((req, res) => {
       let body = {}; try { body = JSON.parse(buf || '{}'); } catch (e) {}
       if (req.url === '/api/chat') return chat(req, res, body);
       if (req.url === '/api/models') {
-        try { const r = await fetch('http://localhost:11434/api/tags'); const d = await r.json(); return res.end(JSON.stringify({ models: (d.models || []).map(m => m.name) })); }
-        catch (e) { return res.end(JSON.stringify({ models: [] })); }
+        try { const d = await ollamaInfo(); return res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running })); }
+        catch (e) { return res.end(JSON.stringify({ models: [], installed: false, running: false })); }
+      }
+      if (req.url === '/api/ollama/pull') {
+        const model = String(body.model || 'llama3.2').replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 60) || 'llama3.2';
+        const d = await ollamaInfo();
+        if (!d.installed && !d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama install nahi — ollama.com se install karo (free), phir ye button dobara dabao' }));
+        if (!d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama server start nahi hua — Ollama app kholo ya "ollama serve" chalao, phir try karo' }));
+        if (d.models.some(m => m.split(':')[0] === model.split(':')[0])) return res.end(JSON.stringify({ ok: true, already: true, models: d.models, model }));
+        ollamaPullStart(model);
+        return res.end(JSON.stringify({ ok: true, started: true, model }));
       }
       if (req.url === '/api/ping') return res.end(JSON.stringify({ ok: true, app: 'Dev Craft Desktop v1', os: os.type() }));
       if (req.url === '/api/exec') {

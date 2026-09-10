@@ -131,9 +131,22 @@
         <input type="text" id="setCustomModel" class="set-input" placeholder="llama-3.1-8b-instant">
       </div>
       <div id="ollamaSet" style="display:none">
-        <div class="set-label">Ollama Model</div>
+        <div class="set-hint" id="ollamaStatus" style="margin:0 0 8px">🦙 Ollama check ho raha hai…</div>
+        <div class="set-label">Ollama Model (installed)</div>
         <select id="setOllamaModel" class="set-input"><option value="llama3.2">llama3.2</option></select>
-        <div class="set-hint">Models list automatically aati hai. Install: ollama.com → "ollama pull llama3.2"</div>
+        <div class="set-label" style="margin-top:12px">Naya model download karo (auto)</div>
+        <div style="display:flex;gap:8px">
+          <input type="text" id="ollamaPullModel" class="set-input" placeholder="llama3.2" value="llama3.2" style="flex:1">
+          <button class="mini-btn" style="margin-top:0;padding:8px 12px;font-size:12px" onclick="ollamaPullGo()">⬇️ Download</button>
+        </div>
+        <div style="margin-top:6px">
+          <button class="mini-btn" onclick="ollamaQuick(this,'llama3.2')">llama3.2 (~2GB)</button>
+          <button class="mini-btn" onclick="ollamaQuick(this,'qwen2.5:3b')">qwen2.5:3b</button>
+          <button class="mini-btn" onclick="ollamaQuick(this,'gemma2:2b')">gemma2:2b</button>
+          <button class="mini-btn" onclick="ollamaQuick(this,'phi3:mini')">phi3:mini</button>
+        </div>
+        <div class="set-hint" id="ollamaPullProg" style="display:none;color:var(--primary)"></div>
+        <div class="set-hint">Install nahi? <b>ollama.com</b> → download → install → phir yahan Refresh. App server khud start karta hai.</div>
       </div>
       <div class="set-actions">
         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:10px">
@@ -230,13 +243,43 @@
     document.getElementById('setBaseUrl').value = settings.base_url || '';
     document.getElementById('setCustomKey').value = settings.custom_key || '';
     document.getElementById('setCustomModel').value = settings.custom_model || '';
-    fetch('/api/models').then(r => r.json()).then(d => {
-      const sel = document.getElementById('setOllamaModel');
-      if (d.models && d.models.length) sel.innerHTML = d.models.map(m => '<option value="' + m + '"' + (m === settings.ollama_model ? ' selected' : '') + '>' + m + '</option>').join('');
-      else sel.innerHTML = '<option value="">— Ollama nahi mila —</option>';
-    }).catch(() => {});
+    ollamaRefresh();
   }
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+  let _ollamaIv = null;
+  async function ollamaRefresh() {
+    const st = document.getElementById('ollamaStatus'); const sel = document.getElementById('setOllamaModel');
+    try {
+      const d = await (await fetch('/api/models')).json();
+      if (d.models && d.models.length) {
+        sel.innerHTML = d.models.map(m => '<option value="' + m + '"' + (m === settings.ollama_model ? ' selected' : '') + '>' + m + '</option>').join('');
+        st.innerHTML = '✅ <b>Ollama chal raha</b> — ' + d.models.length + ' model' + (d.models.length > 1 ? 's' : '') + ' ready';
+      } else if (d.installed) st.innerHTML = '⚠️ Ollama mila lekin server start nahi — "Refresh" dabao (app khud start karta hai) ya Ollama app kholo';
+      else st.innerHTML = '❌ <b>Ollama install nahi</b> — ollama.com se free install karo, phir Refresh';
+    } catch (e) { st.textContent = '❌ Check fail: ' + e.message; }
+  }
+  function ollamaQuick(btn, m) { document.getElementById('ollamaPullModel').value = m; }
+  async function ollamaPullGo() {
+    const m = (document.getElementById('ollamaPullModel').value || 'llama3.2').trim();
+    const prog = document.getElementById('ollamaPullProg'); prog.style.display = 'block'; prog.textContent = '⬇️ ' + m + ' shuru…';
+    try {
+      const r = await fetch('/api/ollama/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) });
+      const d = await r.json();
+      if (!d.ok) { prog.textContent = '❌ ' + d.error; return; }
+      if (d.already) { prog.textContent = '✅ ' + m + ' already installed!'; ollamaRefresh(); return; }
+      if (_ollamaIv) clearInterval(_ollamaIv);
+      _ollamaIv = setInterval(async () => {
+        try {
+          const s = await (await fetch('/api/ollama/pull_status')).json();
+          const st = s.state;
+          if (st && st.error) { prog.textContent = '❌ ' + st.error; clearInterval(_ollamaIv); _ollamaIv = null; return; }
+          const pct = st ? st.pct : 0; const stat = st ? st.status : '';
+          prog.textContent = '⬇️ ' + m + ': ' + pct + '% — ' + stat + ' (internet speed pe depend, chhota model ~2GB)';
+          if (st && st.done) { clearInterval(_ollamaIv); _ollamaIv = null; prog.textContent = '✅ ' + m + ' download complete! Model list mein aa gaya.'; ollamaRefresh(); }
+        } catch (e) {}
+      }, 2000);
+    } catch (e) { prog.textContent = '❌ ' + e.message; }
+  }
   function setProvider(p) {
     settings.provider = p;
     ['openai','ollama','openrouter','custom'].forEach(x => {
@@ -245,6 +288,7 @@
     });
     document.getElementById('openaiSet').style.display = p === 'openai' ? 'block' : 'none';
     document.getElementById('ollamaSet').style.display = p === 'ollama' ? 'block' : 'none';
+    if (p === 'ollama') ollamaRefresh();
     document.getElementById('openrouterSet').style.display = p === 'openrouter' ? 'block' : 'none';
     document.getElementById('customSet').style.display = p === 'custom' ? 'block' : 'none';
   }
