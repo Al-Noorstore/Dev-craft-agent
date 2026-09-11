@@ -857,6 +857,13 @@ http.createServer((req, res) => {
         catch (e) { return res.end(JSON.stringify({ models: [], installed: false, running: false })); }
       }
       if (req.url === '/api/ollama/pull') return res.end(JSON.stringify(await ollamaPullRequest(body.model)));
+      if (req.url === '/api/brain-key') {
+        try {
+          const r = await fetch('https://dev-craft-agent.vercel.app/api/brain-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: String(body.pass || '') }) });
+          const d = await r.json();
+          return res.end(JSON.stringify(d));
+        } catch (e) { return res.end(JSON.stringify({ ok: false, error: 'Cloud se connect nahi ho paya: ' + e.message })); }
+      }
       if (req.url === '/api/chat/test') {
         // beginner-friendly key tester: koi AI call nahi — seedha provider pe ping
         try {

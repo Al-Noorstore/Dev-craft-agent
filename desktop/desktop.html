@@ -140,10 +140,11 @@
         <div class="set-hint" id="keyHint"></div>
         <div class="set-label">Model (optional — khali = best default)</div>
         <input type="text" id="setModel" class="set-input" placeholder="auto">
-        <div style="display:flex;gap:8px;margin-top:12px">
+        <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
           <button class="btn save" style="width:auto;padding:9px 16px" onclick="testKeyNow()">🔍 Test Key</button>
-          <span class="set-hint" style="align-self:center;margin:0">pehle Test, phir Save</span>
+          <button class="btn save" style="width:auto;padding:9px 16px;background:#0e9f6e" onclick="cloudKeyNow()">☁️ Cloud se key lao</button>
         </div>
+        <div class="set-hint" style="margin:6px 0 0 0">☁️ button: cloud ki asli key khud aa jayegi — copy-paste ki zaroorat nahi</div>
         <div class="set-hint" id="testKeyResult" style="display:none;margin-top:8px;white-space:pre-wrap"></div>
       </div>
       <div id="customSet" style="display:none">
@@ -364,6 +365,21 @@
       document.getElementById('setModel').value = getModel(p);
       document.getElementById('keyHint').innerHTML = AI_INFO[p].hint + ' — key sirf tumhare PC pe save hoti hai ✅';
     }
+  }
+  async function cloudKeyNow() {
+    const pass = prompt('Passphrase likho (Noora ke chat mein diya gaya hai):');
+    if (!pass) return;
+    const box = document.getElementById('testKeyResult');
+    box.style.display = 'block'; box.style.color = 'var(--text-muted)'; box.textContent = '☁️ Cloud se key aa rahi hai…';
+    try {
+      const r = await fetch('/api/brain-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: pass }) });
+      const d = await r.json();
+      if (!d.ok) { box.style.color = '#e11d48'; box.textContent = '❌ ' + (d.error || 'key nahi mili'); return; }
+      if (settings.provider !== d.provider) setProvider(d.provider); else document.getElementById('setApiKey').value = getKey(d.provider) || '';
+      document.getElementById('setApiKey').value = d.api_key;
+      box.style.color = '#14a878'; box.textContent = '✅ Cloud ki key aa gayi! Testing…';
+      await testKeyNow();
+    } catch (e) { box.style.color = '#e11d48'; box.textContent = '❌ ' + e.message; }
   }
   async function testKeyNow() {
     const p = settings.provider;

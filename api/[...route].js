@@ -8,6 +8,7 @@ const routes = {
   'audit': require('../server/endpoints/audit.js'),
   'automations': require('../server/endpoints/automations.js'),
   'bridge': require('../server/endpoints/bridge.js'),
+  'brain-key': require('../server/endpoints/brain-key.js'),
   'chat': require('../server/endpoints/chat.js'),
   'credentials': require('../server/endpoints/credentials.js'),
   'config': require('../server/endpoints/config.js'),
