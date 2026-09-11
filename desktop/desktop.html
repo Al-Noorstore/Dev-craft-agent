@@ -46,8 +46,10 @@
   @keyframes tdot { 0%,60%,100%{ transform:translateY(0); opacity:.35 } 30%{ transform:translateY(-4px); opacity:1 } }
   #mcpModal { position: fixed; inset: 0; background: rgba(15,15,15,.55); z-index: 90; display: none; align-items: center; justify-content: center; padding: 16px; }
   #mcpModal.open { display: flex; }
-  #settingsModal { position:fixed; inset:0; background:rgba(17,24,39,.45); z-index:90; display:none; align-items:center; justify-content:center; padding:16px; }
-  #settingsModal.open { display:flex; }
+  #settingsModal { position:fixed; inset:0; background:var(--bg); z-index:90; display:none; overflow-y:auto; }
+  #settingsModal.open { display:block; }
+  #settingsModal .set-box { background:transparent; border-radius:0; padding:14px 14px 90px; width:100%; max-width:680px; max-height:none; }
+  .pv { font-size:10px; font-weight:800; color:var(--primary); margin-top:2px; }
   .set-box { background:var(--card); border-radius:16px; padding:20px; width:100%; max-width:400px; max-height:85vh; overflow-y:auto; }
   .set-box::-webkit-scrollbar { width:6px; }
   .set-box::-webkit-scrollbar-track { background:transparent; }
@@ -86,7 +88,7 @@
     <div class="welcome">
       <div class="big">⚡</div>
       <h2>Dev Craft Agent — Desktop</h2>
-      <p>OpenClaw powers: terminal, files/folders, apps, YouTube — sab tumhare PC pe.<br>Settings (⚙️) mein Ollama (free) ya apni OpenAI key select karo.</p>
+      <p>OpenClaw powers: terminal, files/folders, apps, YouTube — sab tumhare PC pe.<br>Settings (⚙️) mein koi bhi AI chuno — ✨ Gemini FREE, ⚡ Groq FREE, ya 🦙 Ollama offline.</p>
       <div class="quick">
         <button onclick="quick('Mere Downloads folder mein kya hai?')">📂 Downloads folder dekho</button>
         <button onclick="quick('YouTube pe patriotic songs search karo')">📺 YouTube search karo</button>
@@ -113,29 +115,31 @@
     <button id="send" onclick="send()">↑</button>
   </div>
 
-  <div id="settingsModal" onclick="if(event.target===this)closeSettings()">
+  <div id="settingsModal">
     <div class="set-box">
-      <h3>⚙️ Settings</h3>
-      <div class="set-label">AI Provider</div>
-      <div class="provider-row" style="grid-template-columns:1fr 1fr">
-        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ OpenAI</div>
-        <div class="provider-opt" id="prov-ollama" onclick="setProvider('ollama')">🦙 Ollama (Free)</div>
-        <div class="provider-opt" id="prov-openrouter" onclick="setProvider('openrouter')">🔗 OpenRouter</div>
-        <div class="provider-opt" id="prov-custom" onclick="setProvider('custom')">🛠 Custom</div>
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:16px">
+        <button class="icon-btn" onclick="closeSettings()" title="Band karo">←</button>
+        <h3 style="margin:0;flex:1">⚙️ Settings</h3>
+        <button class="btn save" onclick="saveSettings()">💾 Save</button>
       </div>
-      <div id="openaiSet">
-        <div class="set-label">OpenAI API Key</div>
-        <input type="password" id="setApiKey" class="set-input" placeholder="sk-...">
-        <div class="set-hint">Key sirf tumhare PC pe (browser localStorage) rehti hai. platform.openai.com/api-keys</div>
-        <div class="set-label">Model</div>
-        <input type="text" id="setModel" class="set-input" placeholder="gpt-4o-mini">
+      <div class="set-label">Apna AI chuno — koi bhi (bas key paste karo)</div>
+      <div class="provider-row" style="grid-template-columns:repeat(3,1fr)">
+        <div class="provider-opt" id="prov-gemini" onclick="setProvider('gemini')">✨ Gemini<div class="pv">FREE</div></div>
+        <div class="provider-opt" id="prov-openai" onclick="setProvider('openai')">☁️ ChatGPT</div>
+        <div class="provider-opt" id="prov-claude" onclick="setProvider('claude')">🤖 Claude</div>
+        <div class="provider-opt" id="prov-openrouter" onclick="setProvider('openrouter')">🔗 OpenRouter<div class="pv">free models</div></div>
+        <div class="provider-opt" id="prov-groq" onclick="setProvider('groq')">⚡ Groq<div class="pv">FREE fast</div></div>
+        <div class="provider-opt" id="prov-deepseek" onclick="setProvider('deepseek')">🐋 DeepSeek</div>
+        <div class="provider-opt" id="prov-mistral" onclick="setProvider('mistral')">🌫️ Mistral</div>
+        <div class="provider-opt" id="prov-ollama" onclick="setProvider('ollama')">🦙 Ollama<div class="pv">offline free</div></div>
+        <div class="provider-opt" id="prov-custom" onclick="setProvider('custom')">🛠 Custom<div class="pv">advanced</div></div>
       </div>
-      <div id="openrouterSet" style="display:none">
-        <div class="set-label">OpenRouter API Key</div>
-        <input type="password" id="setOrKey" class="set-input" placeholder="sk-or-v1-...">
-        <div class="set-hint">openrouter.ai/keys — 100+ models ek key se (free models bhi)</div>
-        <div class="set-label">Model</div>
-        <input type="text" id="setOrModel" class="set-input" placeholder="deepseek/deepseek-chat-v3-0324:free">
+      <div id="aiSet">
+        <div class="set-label">API Key — paste karo</div>
+        <input type="password" id="setApiKey" class="set-input" placeholder="yahan paste karo...">
+        <div class="set-hint" id="keyHint"></div>
+        <div class="set-label">Model (optional — khali = best default)</div>
+        <input type="text" id="setModel" class="set-input" placeholder="auto">
       </div>
       <div id="customSet" style="display:none">
         <div class="set-label">Base URL</div>
@@ -209,7 +213,7 @@
   let settings = JSON.parse(localStorage.getItem('dcd_settings') || '{}');
   let history = [], busy = false;
   const chat = document.getElementById('chat'), input = document.getElementById('input');
-  if (!settings.provider) settings.provider = 'openai';
+  if (!settings.provider) settings.provider = 'gemini';
 
   async function mcpApi(action, extra) {
     const r = await fetch('/api/mcp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action, ...extra }) });
@@ -259,14 +263,9 @@
   function openSettings() { bridgeState();
     document.getElementById('settingsModal').classList.add('open');
     setProvider(settings.provider);
-    document.getElementById('setApiKey').value = settings.api_key || '';
-    document.getElementById('setModel').value = settings.model || '';
-    document.getElementById('setOrKey').value = settings.or_key || '';
-    document.getElementById('setOrModel').value = settings.or_model || 'deepseek/deepseek-chat-v3-0324:free';
     document.getElementById('setBaseUrl').value = settings.base_url || '';
     document.getElementById('setCustomKey').value = settings.custom_key || '';
     document.getElementById('setCustomModel').value = settings.custom_model || '';
-    ollamaRefresh();
   }
   function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
   function toggleJarvis() {
@@ -331,29 +330,50 @@
       }, 2000);
     } catch (e) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + e.message; }
   }
+  const AI_INFO = {
+    gemini: { hint: '✨ FREE — key yahan se: <b>aistudio.google.com/apikey</b>' },
+    openai: { hint: '☁️ key yahan se: <b>platform.openai.com/api-keys</b> (paid)' },
+    claude: { hint: '🤖 key yahan se: <b>console.anthropic.com</b> → API Keys' },
+    openrouter: { hint: '🔗 key yahan se: <b>openrouter.ai/keys</b> — free models bhi' },
+    groq: { hint: '⚡ key yahan se: <b>console.groq.com/keys</b> — FREE, super fast' },
+    deepseek: { hint: '🐋 key yahan se: <b>platform.deepseek.com</b>' },
+    mistral: { hint: '🌫️ key yahan se: <b>console.mistral.ai</b>' }
+  };
+  const PROVS = ['gemini','openai','claude','openrouter','groq','deepseek','mistral','ollama','custom'];
+  function getKey(p) { const K = (settings.keys || {})[p]; if (K) return K; if (p === 'openrouter') return settings.or_key || ''; if (p === 'custom') return settings.custom_key || ''; if (p === 'openai') return settings.api_key || ''; return ''; }
+  function getModel(p) { const M = (settings.models || {})[p]; if (M) return M; if (p === 'openrouter') return settings.or_model || ''; if (p === 'custom') return settings.custom_model || ''; if (p === 'openai') return settings.model || ''; return ''; }
   function setProvider(p) {
     settings.provider = p;
-    ['openai','ollama','openrouter','custom'].forEach(x => {
-      const el = document.getElementById('prov-' + x);
-      if (el) el.classList.toggle('active', p === x);
-    });
-    document.getElementById('openaiSet').style.display = p === 'openai' ? 'block' : 'none';
+    PROVS.forEach(x => { const el = document.getElementById('prov-' + x); if (el) el.classList.toggle('active', p === x); });
+    const cloud = !!AI_INFO[p];
+    document.getElementById('aiSet').style.display = cloud ? 'block' : 'none';
     document.getElementById('ollamaSet').style.display = p === 'ollama' ? 'block' : 'none';
     if (p === 'ollama') ollamaRefresh();
-    document.getElementById('openrouterSet').style.display = p === 'openrouter' ? 'block' : 'none';
     document.getElementById('customSet').style.display = p === 'custom' ? 'block' : 'none';
+    if (cloud) {
+      document.getElementById('setApiKey').value = getKey(p);
+      document.getElementById('setModel').value = getModel(p);
+      document.getElementById('keyHint').innerHTML = AI_INFO[p].hint + ' — key sirf tumhare PC pe save hoti hai ✅';
+    }
   }
   function saveSettings() {
-    settings.api_key = document.getElementById('setApiKey').value.trim();
-    settings.model = document.getElementById('setModel').value.trim() || 'gpt-4o-mini';
-    settings.or_key = document.getElementById('setOrKey').value.trim();
-    settings.or_model = document.getElementById('setOrModel').value.trim() || 'deepseek/deepseek-chat-v3-0324:free';
-    settings.base_url = document.getElementById('setBaseUrl').value.trim();
-    settings.custom_key = document.getElementById('setCustomKey').value.trim();
-    settings.custom_model = document.getElementById('setCustomModel').value.trim();
-    settings.ollama_model = document.getElementById('setOllamaModel').value || 'llama3.2';
+    const p = settings.provider;
+    settings.keys = settings.keys || {}; settings.models = settings.models || {};
+    if (p === 'ollama') {
+      settings.ollama_model = document.getElementById('setOllamaModel').value || 'llama3.2';
+    } else if (p === 'custom') {
+      settings.base_url = document.getElementById('setBaseUrl').value.trim();
+      settings.custom_key = document.getElementById('setCustomKey').value.trim();
+      settings.custom_model = document.getElementById('setCustomModel').value.trim();
+    } else {
+      settings.keys[p] = document.getElementById('setApiKey').value.trim();
+      const m = document.getElementById('setModel').value.trim();
+      if (m) settings.models[p] = m; else delete settings.models[p];
+      if (p === 'openai') { settings.api_key = settings.keys[p]; settings.model = m || 'gpt-4o-mini'; }
+      if (p === 'openrouter') { settings.or_key = settings.keys[p]; settings.or_model = m || 'deepseek/deepseek-chat-v3-0324:free'; }
+    }
     localStorage.setItem('dcd_settings', JSON.stringify(settings));
-    if (settings.provider === 'ollama') fetch('/api/ollama/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: settings.ollama_model }) }).catch(() => {});
+    if (p === 'ollama') fetch('/api/ollama/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: settings.ollama_model }) }).catch(() => {});
     closeSettings();
   }
 
@@ -432,8 +452,8 @@
     try {
       const res = await fetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text, history: history.slice(-10), jarvis: !!settings.jarvis, provider: settings.provider,
-          model: settings.provider === 'ollama' ? settings.ollama_model : (settings.provider === 'openrouter' ? settings.or_model : (settings.provider === 'custom' ? settings.custom_model : settings.model)),
-          api_key: settings.provider === 'openrouter' ? settings.or_key : (settings.provider === 'custom' ? settings.custom_key : settings.api_key),
+          model: settings.provider === 'ollama' ? settings.ollama_model : getModel(settings.provider),
+          api_key: getKey(settings.provider),
           base_url: settings.base_url })
       });
       const d = await res.json();

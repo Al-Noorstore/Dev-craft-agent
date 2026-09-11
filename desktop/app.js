@@ -383,7 +383,7 @@ async function runTool(name, args, steps) {
     if (args.model) vaultSet('BRAIN_MODEL', String(args.model).trim(), 'AI brain model');
     const masked = key.slice(0, 4) + '...' + key.slice(-4);
     steps.push({ title: '🧠 ' + P.label + ' connect ho raha hai', status: 'done', detail: masked });
-    return JSON.stringify({ ok: true, connected: true, provider: prov, label: P.label, model: args.model || P.model, masked, note: 'Ab se agent isi AI se sochega (Settings override). Wapas settings wala chahiye to BRAIN_API_KEY delete karo.' });
+    return JSON.stringify({ ok: true, connected: true, provider: prov, label: P.label, model: args.model || P.model, masked, note: 'Ye brain tab chalega jab Settings mein koi key na ho — Settings wali key hamesha pehle chalegi. Hatane ke liye "brain disconnect" bolo.' });
   }
     else if (name === 'credential_save') { result = vaultSet(args.name, args.value, args.description); title = '🔐 Token save: ' + String(args.name || '').toUpperCase(); }
     else if (name === 'credential_list') { result = vaultList(); title = '🗂 Tokens list'; }
@@ -626,22 +626,23 @@ async function chat(req, res, body) {
     } catch (e) { return res.end(JSON.stringify({ error: 'Ollama nahi chal raha (localhost:11434). ollama.com se install karo ya Settings mein OpenAI key use karo.' })); }
   }
 
-  // ---- VAULT BRAIN: chat se connected AI brain (Settings pe override) ----
+  // ---- PROVIDER RESOLVE: koi bhi AI (Settings ki key pehle; chat-wala brain sirf fallback) ----
+  let effProv = (provider === 'claude') ? 'anthropic' : (provider || 'openai');
+  if (effProv !== 'custom' && effProv !== 'ollama' && !BRAIN_PROVIDERS[effProv]) effProv = 'openai';
   let effKey = api_key, effUrl, effModel = model;
   const vBrainKey = vaultGet('BRAIN_API_KEY');
-  if (vBrainKey) {
+  if (vBrainKey && !effKey) {
+    effProv = vaultGet('BRAIN_PROVIDER') || effProv;
     effKey = vBrainKey;
     const vUrl = vaultGet('BRAIN_BASE_URL');
     if (vUrl) effUrl = vUrl.replace(/\/+$/, '') + '/chat/completions';
-    effModel = vaultGet('BRAIN_MODEL') || (BRAIN_PROVIDERS[vaultGet('BRAIN_PROVIDER')] ? BRAIN_PROVIDERS[vaultGet('BRAIN_PROVIDER')].model : model);
+    effModel = vaultGet('BRAIN_MODEL') || (BRAIN_PROVIDERS[effProv] ? BRAIN_PROVIDERS[effProv].model : model);
   }
 
-  // ---- OpenAI / OpenRouter / Custom (OpenAI-compatible) ----
-  const BRAIN_URL = effUrl || (provider === 'openrouter' ? 'https://openrouter.ai/v1/chat/completions'
-    : provider === 'custom' ? (base_url || '').replace(/\/+$/, '') + '/chat/completions'
-    : 'https://api.openai.com/v1/chat/completions');
-  const brainModel = effModel || (provider === 'openrouter' ? 'openrouter/auto' : provider === 'custom' ? 'custom-model' : 'gpt-4o-mini');
-  if (!effKey) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) mein apni API key paste karo (OpenAI/OpenRouter/Custom), ya Ollama select karo (free). Ya chat mein key de kar bolo "connect as AI brain".' }));
+  // ---- Gemini / ChatGPT / Claude / OpenRouter / Groq / DeepSeek / Mistral / Custom (OpenAI-compatible layer) ----
+  const BRAIN_URL = effUrl || (effProv === 'custom' ? (base_url || '').replace(/\/+$/, '') + '/chat/completions' : BRAIN_PROVIDERS[effProv].url);
+  const brainModel = effModel || (effProv === 'custom' ? 'custom-model' : BRAIN_PROVIDERS[effProv].model);
+  if (!effKey) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) kholo, apna AI chuno (✨ Gemini FREE, ⚡ Groq FREE, 🔗 OpenRouter...) aur key paste karo. Ya 🦙 Ollama (offline, free) select karo.' }));
   if (provider === 'custom' && !base_url && !effUrl) return res.end(JSON.stringify({ error: 'Custom API ke liye Base URL Settings mein daalo' }));
   const messages = [{ role: 'system', content: sysPrompt }, ...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
   const jarvisSays = [];
