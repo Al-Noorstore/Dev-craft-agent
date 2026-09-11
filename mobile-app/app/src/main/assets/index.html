@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ur">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Dev Craft Agent</title>
+<style>
+:root { --primary:#10b981; --bg:#f0fdf4; --card:#ffffff; --text:#0f172a; --muted:#64748b; --border:#dcfce7; --pill:#ecfdf5; --term:#0b1220; }
+* { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+body { font-family:system-ui,-apple-system,sans-serif; background:var(--bg); color:var(--text); height:100vh; display:flex; flex-direction:column; }
+header { background:var(--card); border-bottom:1px solid var(--border); padding:10px 14px; display:flex; align-items:center; gap:8px; position:sticky; top:0; z-index:5; }
+header .logo { width:34px; height:34px; background:linear-gradient(135deg,#10b981,#059669); border-radius:10px; display:flex; align-items:center; justify-content:center; color:#fff; font-weight:900; font-size:16px; }
+header h1 { font-size:15px; font-weight:800; }
+header .sub { font-size:10px; color:var(--muted); }
+.tabs { margin-left:auto; display:flex; gap:4px; }
+.tab { border:none; background:var(--pill); color:var(--muted); padding:7px 12px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; }
+.tab.on { background:var(--primary); color:#fff; }
+.page { display:none; flex:1; overflow-y:auto; }
+.page.on { display:flex; flex-direction:column; }
+/* chat */
+#chatList { flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+.msg { max-width:85%; padding:10px 13px; border-radius:14px; font-size:14px; line-height:1.45; white-space:pre-wrap; word-break:break-word; }
+.msg.user { align-self:flex-end; background:var(--primary); color:#fff; border-bottom-right-radius:4px; }
+.msg.bot { align-self:flex-start; background:var(--card); border:1px solid var(--border); border-bottom-left-radius:4px; }
+.typing { color:var(--muted); font-style:italic; }
+.inputbar { display:flex; gap:8px; padding:10px; background:var(--card); border-top:1px solid var(--border); }
+.inputbar textarea { flex:1; border:1px solid var(--border); border-radius:12px; padding:10px 12px; font-size:14px; resize:none; outline:none; max-height:100px; font-family:inherit; }
+.btn-send { background:var(--primary); color:#fff; border:none; border-radius:12px; padding:0 18px; font-size:18px; cursor:pointer; }
+.icon-btn { background:none; border:none; font-size:20px; cursor:pointer; padding:4px; }
+/* terminal */
+#termPage { background:var(--term); }
+#termOut { flex:1; overflow-y:auto; padding:12px; font-family:'JetBrains Mono',Menlo,monospace; font-size:12px; color:#a5f3c0; white-space:pre-wrap; word-break:break-word; line-height:1.5; }
+#termOut .cmd { color:#fff; font-weight:700; }
+#termOut .err { color:#f87171; }
+#termIn { display:flex; gap:8px; padding:10px; background:#10192b; }
+#termInput { flex:1; background:#0b1220; border:1px solid #1e3a2f; color:#a5f3c0; border-radius:10px; padding:10px; font-family:monospace; font-size:13px; outline:none; }
+#termPage .btn-send { background:#10b981; }
+/* settings */
+#setPage { padding:16px; overflow-y:auto; }
+.set-card { background:var(--card); border:1px solid var(--border); border-radius:14px; padding:14px; margin-bottom:14px; }
+.set-label { font-size:11px; font-weight:800; color:var(--muted); margin:10px 0 4px; text-transform:uppercase; letter-spacing:.5px; }
+.set-input { width:100%; border:1px solid var(--border); border-radius:10px; padding:10px 12px; font-size:13px; outline:none; }
+.btn { border:none; border-radius:10px; padding:11px; font-size:14px; font-weight:700; cursor:pointer; width:100%; margin-top:10px; background:var(--primary); color:#fff; }
+.btn.ghost { background:var(--pill); color:var(--text); }
+.hint { font-size:11px; color:var(--muted); margin-top:6px; line-height:1.5; }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">⚡</div>
+  <div><h1>Dev Craft Agent</h1><div class="sub" id="statusSub">Mobile v1.0 — apna terminal</div></div>
+  <div class="tabs">
+    <button class="tab on" onclick="go('chat')">💬</button>
+    <button class="tab" onclick="go('term')">🖥️</button>
+    <button class="tab" onclick="go('set')">⚙️</button>
+  </div>
+</header>
+
+<div id="chatPage" class="page on">
+  <div id="chatList"></div>
+  <div class="inputbar">
+    <button class="icon-btn" onclick="voiceChat()" title="Bol ke bhejo">🎤</button>
+    <textarea id="chatInput" rows="1" placeholder="Kuch bhi poocho... (Roman Urdu chalti hai)"></textarea>
+    <button class="btn-send" onclick="sendChat()">↑</button>
+  </div>
+</div>
+
+<div id="termPage" class="page">
+  <div id="termOut"></div>
+  <div id="termIn">
+    <button class="icon-btn" onclick="voiceTerm()" style="color:#a5f3c0">🎤</button>
+    <input id="termInput" placeholder="help likho - saare commands milenge" autocomplete="off">
+    <button class="btn-send" onclick="runTerm()">↵</button>
+  </div>
+</div>
+
+<div id="setPage" class="page">
+  <div class="set-card">
+    <div class="set-label">AI Provider (OpenAI-compatible)</div>
+    <select id="setProvider" class="set-input" onchange="provChange()">
+      <option value="openai">☁️ OpenAI</option>
+      <option value="openrouter">🔗 OpenRouter</option>
+      <option value="custom">🛠 Custom URL</option>
+    </select>
+    <div class="set-label">API Key</div>
+    <input id="setKey" class="set-input" type="password" placeholder="sk-...">
+    <div class="set-label">Model</div>
+    <input id="setModel" class="set-input" placeholder="gpt-4o-mini">
+    <div class="set-label" id="urlLabel" style="display:none">Base URL</div>
+    <input id="setBase" class="set-input" placeholder="https://api.groq.com/openai/v1" style="display:none">
+    <button class="btn" onclick="saveSet()">Save</button>
+    <div class="hint">Key sirf is phone pe (localStorage) rehti hai. OpenRouter pe free models bhi milte hain.</div>
+  </div>
+  <div class="set-card">
+    <div class="set-label">Phone Powers (Android permissions)</div>
+    <button class="btn ghost" onclick="permCheck()">🔓 Permissions maango / check karo</button>
+    <div class="hint" id="permStatus">Call, SMS, Mic — in powers ke liye ek baar permission allow karni hogi.</div>
+  </div>
+  <div class="set-card">
+    <div class="set-label">PC Bridge (optional — baad mein)</div>
+    <div class="hint">Laptop ka agent is phone se connect hoga (Termux ki zaroorat NAHI). Ye feature agle version mein aayega — laptop agent + pairing code se.</div>
+  </div>
+  <div class="set-card">
+    <div class="hint" style="text-align:center">⚡ Dev Craft Agent Mobile v1.0 — apna terminal, apni powers 💪</div>
+  </div>
+</div>
+
+<script>
+var A = window.Android || null;
+var chat = document.getElementById('chatList');
+var termOut = document.getElementById('termOut');
+var settings = JSON.parse(localStorage.getItem('dcdm_set') || '{}');
+var history = [];
+
+/* ---------- TABS ---------- */
+function go(p) {
+  ['chat','term','set'].forEach(function(x){ document.getElementById(x+'Page').classList.toggle('on', x===p); });
+  document.querySelectorAll('.tab').forEach(function(t,i){ t.classList.toggle('on', ['chat','term','set'][i]===p); });
+  if (p==='term') document.getElementById('termInput').focus();
+}
+
+/* ---------- CHAT ---------- */
+function addMsg(t, who) {
+  var d = document.createElement('div');
+  d.className = 'msg ' + who;
+  d.textContent = t;
+  chat.appendChild(d);
+  chat.scrollTop = chat.scrollHeight;
+}
+function cfg() {
+  var p = settings.provider || 'openai';
+  var base = p === 'openrouter' ? 'https://openrouter.ai/api/v1' : (p === 'custom' ? (settings.base || 'https://api.openai.com/v1') : 'https://api.openai.com/v1');
+  var model = settings.model || (p === 'openrouter' ? 'deepseek/deepseek-chat-v3-0324:free' : 'gpt-4o-mini');
+  return { base: base, model: model, key: settings.key || '' };
+}
+function sendChat(voiceText) {
+  var input = document.getElementById('chatInput');
+  var text = (voiceText || input.value).trim();
+  if (!text) return;
+  if (!settings.key) { addMsg('Pehle Settings (⚙️) mein apni API key daalo — phir main sochna shuru karunga! 🙂', 'bot'); return; }
+  addMsg(text, 'user');
+  input.value = '';
+  history.push({ role: 'user', content: text });
+  var t = document.createElement('div');
+  t.className = 'msg bot typing';
+  t.textContent = '...soch raha hoon';
+  chat.appendChild(t);
+  var c = cfg();
+  fetch(c.base + '/chat/completions', {
+    method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + c.key },
+    body: JSON.stringify({ model: c.model, messages: [{ role: 'system', content: 'Tum Dev Craft Agent ho - Noora ka personal AI jo uske phone pe chalta hai. Roman Urdu mein baat karo, friendly aur helpful ho. Phone ke hardware ka kaam terminal se hota hai (call, sms, torch) - user ko commands batao jab zaroorat ho.' }].concat(history.slice(-10)) })
+  }).then(function(r){ return r.json(); }).then(function(d) {
+    t.remove();
+    var reply = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || ('Error: ' + JSON.stringify(d).slice(0, 200));
+    addMsg(reply, 'bot');
+    history.push({ role: 'assistant', content: reply });
+    if (A && settings.jarvis) A.speak(reply.replace(/[*#>`_]/g, '').slice(0, 400));
+  }).catch(function(e) { t.remove(); addMsg('Error: ' + e.message + ' — internet check karo', 'bot'); });
+}
+function voiceChat() { if (A) A.listen(); else addMsg('Voice sirf APK mein chalta hai (browser test nahi)', 'bot'); }
+window.onVoiceResult = function(text) {
+  if (!text) return;
+  var active = document.querySelector('.page.on').id;
+  if (active === 'termPage') { document.getElementById('termInput').value = text; runTerm(); }
+  else { sendChat(text); }
+};
+
+/* ---------- TERMINAL (apna Termux) ---------- */
+var cwd = '/home/noora';
+var vfs = JSON.parse(localStorage.getItem('dcdm_vfs') || '{}');
+function saveVfs() { localStorage.setItem('dcdm_vfs', JSON.stringify(vfs)); }
+function tprint(t, cls) {
+  var s = document.createElement('span');
+  if (cls) s.className = cls;
+  s.textContent = t + '\n';
+  termOut.appendChild(s);
+  termOut.scrollTop = termOut.scrollHeight;
+}
+var HELP = 'DEV CRAFT TERMINAL v1.0 — apna Termux 💪\n' +
+'help                     ye list\n' +
+'ls / cd <dir> / pwd      folder kaam\n' +
+'cat <file> / write <f> <text>  file padho/likho\n' +
+'mkdir <dir> / rm <name>  banao/hatao\n' +
+'js <code>               JavaScript chalao (real!)\n' +
+'get <url>               internet se data lao\n' +
+'ai <sawal>              AI se pucho\n' +
+'call <number>           DIRECT call lagao\n' +
+'dial <number>           dialer kholo\n' +
+'sms <num> <message>     SMS bhejo\n' +
+'torch on/off            torch\n' +
+'vibrate [ms]            vibration\n' +
+'apps                    installed apps list\n' +
+'open <package>          app kholo\n' +
+'speak <text>            bolo (TTS)\n' +
+'sysinfo                 phone ki info\n' +
+'share <text>            share menu\n' +
+'perms                   permissions check\n' +
+'clear                   screen saaf';
+var termHistory = [], hIdx = -1;
+function runTerm() {
+  var inp = document.getElementById('termInput');
+  var line = inp.value.trim();
+  if (!line) return;
+  tprint(cwd + ' $ ' + line, 'cmd');
+  termHistory.push(line); hIdx = termHistory.length;
+  inp.value = '';
+  try { exec(line); } catch (e) { tprint('Error: ' + e.message, 'err'); }
+}
+document.getElementById('termInput').addEventListener('keydown', function(e) {
+  if (e.key === 'Enter') { e.preventDefault(); runTerm(); }
+  if (e.key === 'ArrowUp' && hIdx > 0) { hIdx--; this.value = termHistory[hIdx]; }
+  if (e.key === 'ArrowDown') { hIdx = Math.min(hIdx+1, termHistory.length); this.value = termHistory[hIdx] || ''; }
+});
+function norm(p) {
+  if (!p) return cwd;
+  if (p.startsWith('/')) return p.replace(/\/+$/,'') || '/';
+  var parts = (cwd + '/' + p).split('/');
+  var st = [];
+  parts.forEach(function(x){ if (x && x !== '.') { if (x === '..') st.pop(); else st.push(x); } });
+  return '/' + st.join('/');
+}
+function exec(line) {
+  var sp = line.indexOf(' ');
+  var cmd = (sp < 0 ? line : line.slice(0, sp)).toLowerCase();
+  var rest = sp < 0 ? '' : line.slice(sp + 1).trim();
+  switch (cmd) {
+    case 'help': tprint(HELP); break;
+    case 'clear': termOut.innerHTML = ''; break;
+    case 'pwd': tprint(cwd); break;
+    case 'ls': {
+      var found = [];
+      var p = cwd === '/' ? '' : cwd;
+      Object.keys(vfs).forEach(function(k) { if (k.startsWith(p + '/') && k.indexOf('/', p.length + 1) < 0) found.push(k.slice(p.length + 1)); });
+      tprint(found.length ? found.join('  ') : '(khaali folder)');
+      break;
+    }
+    case 'cd': cwd = rest ? norm(rest) : '/home/noora'; break;
+    case 'mkdir': if (rest) { vfs[norm(rest) + '/'] = null; saveVfs(); tprint('folder bana: ' + norm(rest)); } break;
+    case 'rm': {
+      var t2 = norm(rest);
+      Object.keys(vfs).forEach(function(k) { if (k === t2 || k.slice(0, t2.length + 1) === t2 + '/') delete vfs[k]; });
+      saveVfs(); tprint('hata diya: ' + t2);
+      break;
+    }
+    case 'write': {
+      var s2 = rest.indexOf(' ');
+      if (s2 < 0) { tprint('write <file> <text>', 'err'); break; }
+      var f = norm(rest.slice(0, s2)), c = rest.slice(s2 + 1);
+      vfs[f] = c; saveVfs(); tprint('likh diya: ' + f);
+      break;
+    }
+    case 'cat': {
+      var f2 = norm(rest);
+      if (f2 in vfs) tprint(vfs[f2]); else tprint('file nahi mili: ' + f2, 'err');
+      break;
+    }
+    case 'js': {
+      try { var r = eval(rest); tprint(String(r)); } catch (e) { tprint('JS Error: ' + e.message, 'err'); }
+      break;
+    }
+    case 'get': {
+      tprint('...fetch kar raha hoon');
+      fetch(rest).then(function(r){ return r.text(); }).then(function(t3){ tprint(t3.slice(0, 3000)); }).catch(function(e){ tprint('Fetch fail: ' + e.message, 'err'); });
+      break;
+    }
+    case 'ai': { document.getElementById('chatInput').value = rest; go('chat'); sendChat(); break; }
+    case 'dial': {
+      if (!A) { tprint('Ye power sirf APK mein (browser test mode hai)', 'err'); break; }
+      if (!rest) { tprint('dial <number>', 'err'); break; }
+      tprint(A.dialCall(rest.replace(/[^0-9+]/g, ''))); break;
+    }
+    case 'call': {
+      if (!A) { tprint('Ye power sirf APK mein (browser test mode hai)', 'err'); break; }
+      if (!rest) { tprint('call <number>', 'err'); break; }
+      tprint(A.placeCall(rest.replace(/[^0-9+]/g, ''))); break;
+    }
+    case 'sms': {
+      if (!A) { tprint('APK-only power', 'err'); break; }
+      var s3 = rest.indexOf(' ');
+      if (s3 < 0) { tprint('sms <num> <message>', 'err'); break; }
+      tprint(A.sendSms(rest.slice(0, s3).replace(/[^0-9+]/g, ''), rest.slice(s3 + 1)));
+      break;
+    }
+    case 'torch': { if (A) tprint(A.torch(rest !== 'off')); else tprint('APK-only', 'err'); break; }
+    case 'vibrate': { if (A) tprint(A.vibrate(parseInt(rest) || 500)); else tprint('APK-only', 'err'); break; }
+    case 'apps': { if (A) tprint(A.apps()); else tprint('APK-only', 'err'); break; }
+    case 'open': { if (A && rest) tprint(A.openApp(rest)); else tprint('APK-only', 'err'); break; }
+    case 'speak': { if (A && rest) tprint(A.speak(rest)); else tprint('APK-only', 'err'); break; }
+    case 'share': { if (A && rest) tprint(A.share(rest)); else tprint('APK-only', 'err'); break; }
+    case 'sysinfo': {
+      var b = A ? A.battery() : '?';
+      tprint('Device: ' + (A ? A.info() : 'browser test mode') + '\nBattery: ' + b + '\nCWD: ' + cwd + '\nFiles: ' + Object.keys(vfs).length);
+      break;
+    }
+    case 'perms': { if (A) tprint(A.askPerms()); else tprint('APK-only', 'err'); break; }
+    default: tprint('Command nahi mila: ' + cmd + ' — help likho', 'err');
+  }
+}
+function voiceTerm() { if (A) A.listen(); else tprint('Voice sirf APK mein', 'err'); }
+
+/* ---------- SETTINGS ---------- */
+function provChange() {
+  var p = document.getElementById('setProvider').value;
+  document.getElementById('urlLabel').style.display = p === 'custom' ? '' : 'none';
+  document.getElementById('setBase').style.display = p === 'custom' ? '' : 'none';
+}
+function saveSet() {
+  settings.provider = document.getElementById('setProvider').value;
+  settings.key = document.getElementById('setKey').value.trim();
+  settings.model = document.getElementById('setModel').value.trim();
+  settings.base = document.getElementById('setBase').value.trim();
+  localStorage.setItem('dcdm_set', JSON.stringify(settings));
+  A && A.toast('Settings save ho gayi ✅');
+}
+function permCheck() {
+  if (!A) { document.getElementById('permStatus').textContent = 'Browser test mode — APK mein permissions aati hain.'; return; }
+  var r = A.askPerms();
+  document.getElementById('permStatus').textContent = r + ' — jo NAHI hai, popup aayega allow karne ka.';
+  A.toast('Permissions check ho rahi hain');
+}
+/* init */
+if (settings.provider) document.getElementById('setProvider').value = settings.provider;
+document.getElementById('setKey').value = settings.key || '';
+document.getElementById('setModel').value = settings.model || '';
+document.getElementById('setBase').value = settings.base || '';
+provChange();
+addMsg('⚡ Salaam Noora! Main ab tumhare phone pe chal raha hoon — apne APK mein, apne terminal ke saath! 🖥️\n\nTerminal (🖥️ tab) mein help likho — call, sms, torch, apps, JavaScript sab chalta hai. Bina Termux ke! 💪', 'bot');
+document.getElementById('termInput').addEventListener('click', function(){});
+tprint('DEV CRAFT TERMINAL v1.0 — apna Termux 💪\nType help for commands\n');
+</script>
+</body>
+</html>
