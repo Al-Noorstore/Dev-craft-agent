@@ -213,7 +213,7 @@ async function mcpCallToolFn(url, token, toolName, args) {
 
 // ---------- TOOLS (OpenClaw powers) ----------
 const BRAIN_PROVIDERS = {
-  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.6-flash', label: 'Google Gemini' },
+  gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-flash-latest', label: 'Google Gemini' },
   openai:    { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', label: 'OpenAI' },
   openrouter:{ url: 'https://openrouter.ai/v1/chat/completions', model: 'openrouter/auto', label: 'OpenRouter' },
   groq:      { url: 'https://api.groq.com/openai/v1/chat/completions', model: 'llama-3.3-70b-versatile', label: 'Groq' },
@@ -857,6 +857,38 @@ http.createServer((req, res) => {
         catch (e) { return res.end(JSON.stringify({ models: [], installed: false, running: false })); }
       }
       if (req.url === '/api/ollama/pull') return res.end(JSON.stringify(await ollamaPullRequest(body.model)));
+      if (req.url === '/api/chat/test') {
+        // beginner-friendly key tester: koi AI call nahi — seedha provider pe ping
+        try {
+          const prov = String(body.provider || '').toLowerCase().trim();
+          const key = String(body.api_key || '').trim();
+          const tmodel = String(body.model || '').trim();
+          const tbase = String(body.base_url || '').trim();
+          if (prov === 'ollama') {
+            const d = await ollamaInfo();
+            if (!d.installed) return res.end(JSON.stringify({ ok: false, error: 'Ollama install hi nahi hai — Settings mein "Install Ollama" button dabao ya ollama.com se install karo.' }));
+            if (!d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama installed hai lekin chal nahi raha — "ollama serve" terminal mein chalao, phir Settings dobara kholo.' }));
+            if (!d.models.length) return res.end(JSON.stringify({ ok: false, error: 'Ollama chal raha hai lekin koi model nahi — Settings mein "Download" se llama3.2 ya qwen2.5:3b utaro.' }));
+            return res.end(JSON.stringify({ ok: true, reply: 'Ollama OK — models: ' + d.models.slice(0, 4).join(', ') }));
+          }
+          let effProv = (prov === 'claude') ? 'anthropic' : (prov || 'openai');
+          if (effProv !== 'custom' && !BRAIN_PROVIDERS[effProv]) return res.end(JSON.stringify({ ok: false, error: 'AI samajh nahi aaya: ' + prov + ' — Settings mein list se chuno.' }));
+          if (effProv !== 'custom' && !key) return res.end(JSON.stringify({ ok: false, error: 'API key khali hai — pehle key paste karo (Settings tile ke neeche likha hai kahan se milegi).' }));
+          const TURL = effProv === 'custom' ? (tbase.replace(/\/+$/, '') + '/chat/completions') : BRAIN_PROVIDERS[effProv].url;
+          const TMODEL = tmodel || (effProv === 'custom' ? 'custom-model' : BRAIN_PROVIDERS[effProv].model);
+          const r = await fetch(TURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key }, body: JSON.stringify({ model: TMODEL, messages: [{ role: 'user', content: 'Reply with exactly: OK' }], max_tokens: 10 }) });
+          const txt = await r.text();
+          if (r.ok) {
+            let reply = ''; try { const d = JSON.parse(txt); reply = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || ''; } catch (e) {}
+            return res.end(JSON.stringify({ ok: true, model: TMODEL, reply: reply || 'key valid' }));
+          }
+          let msg = txt.slice(0, 200);
+          try { const d = JSON.parse(txt); msg = (d.error && (d.error.message || d.error)) || (d.message) || msg; } catch (e) {}
+          if (r.status === 401 || r.status === 403 || (r.status === 400 && /valid api key|invalid api|api key not valid/i.test(msg))) msg = 'Key GHALAT hai (provider ne reject kar diya) — ' + msg;
+          if (r.status === 404 && /model/i.test(msg)) msg = 'Model ghalat hai: ' + TMODEL + ' — Model field khali chhodo (auto best) — ' + msg;
+          return res.end(JSON.stringify({ ok: false, status: r.status, error: msg }));
+        } catch (e) { return res.end(JSON.stringify({ ok: false, error: 'Network error: ' + e.message + ' — internet check karo.' })); }
+      }
       if (req.url === '/api/ollama/select') {
         const model = String(body.model || '').trim();
         const d = await ollamaInfo();

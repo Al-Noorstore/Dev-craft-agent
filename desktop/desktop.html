@@ -140,6 +140,11 @@
         <div class="set-hint" id="keyHint"></div>
         <div class="set-label">Model (optional — khali = best default)</div>
         <input type="text" id="setModel" class="set-input" placeholder="auto">
+        <div style="display:flex;gap:8px;margin-top:12px">
+          <button class="btn save" style="width:auto;padding:9px 16px" onclick="testKeyNow()">🔍 Test Key</button>
+          <span class="set-hint" style="align-self:center;margin:0">pehle Test, phir Save</span>
+        </div>
+        <div class="set-hint" id="testKeyResult" style="display:none;margin-top:8px;white-space:pre-wrap"></div>
       </div>
       <div id="customSet" style="display:none">
         <div class="set-label">Base URL</div>
@@ -152,6 +157,10 @@
       </div>
       <div id="ollamaSet" style="display:none">
         <div class="set-hint" id="ollamaStatus" style="margin:0 0 8px">🦙 Ollama check ho raha hai…</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button class="btn save" style="width:auto;padding:8px 14px;font-size:13px" onclick="testKeyNow()">🔍 Test Ollama</button>
+        </div>
+        <div class="set-hint" id="testKeyResultOl" style="display:none;margin-top:6px;white-space:pre-wrap"></div>
         <div class="set-label">Ollama Model (installed)</div>
         <select id="setOllamaModel" class="set-input"><option value="llama3.2">llama3.2</option></select>
         <div class="set-label" style="margin-top:12px">Naya model download karo (auto)</div>
@@ -355,6 +364,22 @@
       document.getElementById('setModel').value = getModel(p);
       document.getElementById('keyHint').innerHTML = AI_INFO[p].hint + ' — key sirf tumhare PC pe save hoti hai ✅';
     }
+  }
+  async function testKeyNow() {
+    const p = settings.provider;
+    const box = document.getElementById(p === 'ollama' ? 'testKeyResultOl' : 'testKeyResult');
+    if (!box) return;
+    box.style.display = 'block'; box.style.color = 'var(--text-muted)'; box.textContent = '🔍 Testing… (10 sec tak wait karo)';
+    const payload = { provider: p };
+    if (p === 'custom') { payload.base_url = document.getElementById('setBaseUrl').value.trim(); payload.api_key = document.getElementById('setCustomKey').value.trim(); payload.model = document.getElementById('setCustomModel').value.trim(); }
+    else if (p !== 'ollama') { payload.api_key = document.getElementById('setApiKey').value.trim(); payload.model = document.getElementById('setModel').value.trim(); }
+    try {
+      const r = await fetch('/api/chat/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+      const d = await r.json();
+      box.style.color = d.ok ? '#14a878' : '#e11d48';
+      box.textContent = d.ok ? ('✅ PERFECT! ' + (d.reply ? ('AI ne jawab diya: "' + String(d.reply).slice(0, 50) + '"') : 'sab sahi hai') + ' — ab Save dabao aur chat karo')
+        : ('❌ ' + (d.error || 'unknown problem'));
+    } catch (e) { box.style.color = '#e11d48'; box.textContent = '❌ App error: ' + e.message; }
   }
   function saveSettings() {
     const p = settings.provider;
