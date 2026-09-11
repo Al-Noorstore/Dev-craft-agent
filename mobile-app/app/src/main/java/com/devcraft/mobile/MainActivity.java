@@ -296,6 +296,122 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String search(final String query) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_WEB_SEARCH);
+                        i.putExtra("query", query);
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://www.google.com/search?q=" + Uri.encode(query)))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception e2) { Toast.makeText(MainActivity.this, "Search fail", Toast.LENGTH_SHORT).show(); }
+                    }
+                }
+            });
+            return "SEARCH: " + query;
+        }
+
+        @JavascriptInterface
+        public String youtube(final String query) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW,
+                            Uri.parse("vnd.youtube://search?query=" + Uri.encode(query)));
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://www.youtube.com/results?search_query=" + Uri.encode(query)))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception e2) { Toast.makeText(MainActivity.this, "YouTube fail", Toast.LENGTH_SHORT).show(); }
+                    }
+                }
+            });
+            return "YOUTUBE: " + query + " search khuli";
+        }
+
+        @JavascriptInterface
+        public String ytplay(final String videoId) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse("vnd.youtube://" + videoId));
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        try {
+                            startActivity(new Intent(Intent.ACTION_VIEW,
+                                Uri.parse("https://www.youtube.com/watch?v=" + Uri.encode(videoId)))
+                                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception e2) { Toast.makeText(MainActivity.this, "Play fail", Toast.LENGTH_SHORT).show(); }
+                    }
+                }
+            });
+            return "PLAY: " + videoId;
+        }
+
+        @JavascriptInterface
+        public String whatsapp(final String number, final String message) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        String num = (number != null) ? number.replaceAll("[^0-9]", "") : "";
+                        String url = "https://wa.me/" + num;
+                        if (message != null && !message.isEmpty()) url += "?text=" + Uri.encode(message);
+                        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        i.setPackage("com.whatsapp");
+                        startActivity(i);
+                    } catch (Exception e) {
+                        try {
+                            String num = (number != null) ? number.replaceAll("[^0-9]", "") : "";
+                            String url = "https://wa.me/" + num;
+                            if (message != null && !message.isEmpty()) url += "?text=" + Uri.encode(message);
+                            startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                        } catch (Exception e2) { Toast.makeText(MainActivity.this, "WhatsApp nahi hai", Toast.LENGTH_SHORT).show(); }
+                    }
+                }
+            });
+            return (number != null && !number.isEmpty())
+                ? "WHATSAPP: " + number + " chat khuli (send button khud dabana)"
+                : "WHATSAPP khula";
+        }
+
+        @JavascriptInterface
+        public String home() {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    Intent i = new Intent(Intent.ACTION_MAIN);
+                    i.addCategory(Intent.CATEGORY_HOME);
+                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                    startActivity(i);
+                }
+            });
+            return "HOME (current app se bahar / close)";
+        }
+
+        @JavascriptInterface
+        public String openUrl(final String url) {
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        String u = url;
+                        if (!u.startsWith("http")) u = "https://" + u;
+                        startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(u)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+                    } catch (Exception e) { Toast.makeText(MainActivity.this, "URL fail", Toast.LENGTH_SHORT).show(); }
+                }
+            });
+            return "OPEN_URL: " + url;
+        }
+
+        @JavascriptInterface
         public String askPerms() {
             askPerm(null);
             String call = hasPerm("android.permission.CALL_PHONE") ? "OK" : "NAHI";

@@ -66,6 +66,7 @@ header .sub { font-size:10px; color:var(--muted); }
 </div>
 
 <div id="termPage" class="page">
+  <div id="termModeBar" style="padding:6px 12px; background:#10192b; color:#10b981; font-size:11px; font-weight:700; border-bottom:1px solid #1e3a2f">📱 MOBILE MODE — apni powers active</div>
   <div id="termOut"></div>
   <div id="termIn">
     <button class="icon-btn" onclick="voiceTerm()" style="color:#a5f3c0">🎤</button>
@@ -97,8 +98,17 @@ header .sub { font-size:10px; color:var(--muted); }
     <div class="hint" id="permStatus">Call, SMS, Mic — in powers ke liye ek baar permission allow karni hogi.</div>
   </div>
   <div class="set-card">
-    <div class="set-label">PC Bridge (optional — baad mein)</div>
-    <div class="hint">Laptop ka agent is phone se connect hoga (Termux ki zaroorat NAHI). Ye feature agle version mein aayega — laptop agent + pairing code se.</div>
+    <div class="set-label">Terminal Mode 🔄</div>
+    <div style="display:flex; gap:8px; margin-top:8px">
+      <button class="btn ghost" id="modeMobileBtn" onclick="setMode('mobile')" style="margin:0">📱 Mobile (apni powers)</button>
+      <button class="btn ghost" id="modePcBtn" onclick="setMode('pc')" style="margin:0">💻 PC Bridge</button>
+    </div>
+    <div class="hint" id="modeHint">Mobile mode: phone ke apne powers (call, sms, torch, apps, YouTube, WhatsApp). PC mode: laptop ke powers (terminal, files, screenshot) — bridge.js chalao + pairing code dalo.</div>
+  </div>
+  <div class="set-card">
+    <div class="set-label">PC Bridge Pairing Code</div>
+    <input id="setPcCode" class="set-input" placeholder="PC se aayi code dalo (bridge.js chalao)">
+    <div class="hint">Laptop pe <code>node bridge.js</code> chalao → code milegi → yahan dalo. Phir PC mode mein laptop ke powers use karo (terminal, files, screenshot).</div>
   </div>
   <div class="set-card">
     <div class="hint" style="text-align:center">⚡ Dev Craft Agent Mobile v1.0 — apna terminal, apni powers 💪</div>
@@ -195,8 +205,41 @@ var HELP = 'DEV CRAFT TERMINAL v1.0 — apna Termux 💪\n' +
 'sysinfo                 phone ki info\n' +
 'share <text>            share menu\n' +
 'install <app>          Play Store se install (page kholega)\n' +
+'search <query>         Google search\n' +
+'yt <keyword>           YouTube search + play\n' +
+'ytplay <video_id>      specific video play\n' +
+'wa [num] [msg]         WhatsApp open / chat kholo\n' +
+'home / close           current app se bahar (home)\n' +
+'url <website>          browser mein kholo\n' +
+'note <text>            note save karo\n' +
+'notes                  saare notes dekho\n' +
 'perms                   permissions check\n' +
 'clear                   screen saaf';
+var termMode = localStorage.getItem('dcdm_mode') || 'mobile';
+function setMode(m) {
+  termMode = m;
+  localStorage.setItem('dcdm_mode', m);
+  updateModeUI();
+  if (A) A.toast(m === 'mobile' ? 'Mobile mode ON — apni powers' : 'PC Bridge mode — laptop powers');
+}
+function updateModeUI() {
+  document.getElementById('modeMobileBtn').style.background = termMode === 'mobile' ? '#10b981' : '';
+  document.getElementById('modeMobileBtn').style.color = termMode === 'mobile' ? '#fff' : '';
+  document.getElementById('modePcBtn').style.background = termMode === 'pc' ? '#10b981' : '';
+  document.getElementById('modePcBtn').style.color = termMode === 'pc' ? '#fff' : '';
+  var bar = document.getElementById('termModeBar');
+  if (termMode === 'mobile') bar.textContent = '📱 MOBILE MODE — apni powers active';
+  else bar.textContent = '💻 PC BRIDGE MODE — laptop powers (bridge.js chalao)';
+}
+function pcRun(tool, args) {
+  // PC bridge — cloud API se laptop pe command bhejta hai
+  return fetch('https://dev-craft-agent.vercel.app/api/bridge/run', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pairing_code: settings.pcCode || '', tool: tool, args: args || {} })
+  }).then(function(r){ return r.json(); })
+    .then(function(d){ return d.result || d.error || JSON.stringify(d); })
+    .catch(function(e){ return 'PC bridge error: ' + e.message + ' — bridge.js chal raha hai?'; });
+}
 var termHistory = [], hIdx = -1;
 function runTerm() {
   var inp = document.getElementById('termInput');
@@ -301,6 +344,56 @@ function exec(line) {
       break;
     }
     case 'perms': { if (A) tprint(A.askPerms()); else tprint('APK-only', 'err'); break; }
+    case 'search': {
+      if (termMode === 'pc') { tprint('PC mode — ye mobile power hai. Mobile mode pe switch karo.', 'err'); break; }
+      if (!A) { tprint('APK-only', 'err'); break; }
+      if (!rest) { tprint('search <query> — jaise: search best laptops 2026', 'err'); break; }
+      tprint(A.search(rest)); break;
+    }
+    case 'yt': case 'youtube': {
+      if (!A) { tprint('APK-only', 'err'); break; }
+      if (!rest) { tprint('yt <keyword> — jaise: yt lofi beats', 'err'); break; }
+      tprint(A.youtube(rest)); break;
+    }
+    case 'ytplay': {
+      if (!A) { tprint('APK-only', 'err'); break; }
+      if (!rest) { tprint('ytplay <video_id ya URL>', 'err'); break; }
+      var vid = rest.replace(/.*v=([^&]+).*/, '$1').replace(/.*youtu\.be\/(.+)/, '$1');
+      tprint(A.ytplay(vid)); break;
+    }
+    case 'wa': case 'whatsapp': {
+      if (!A) { tprint('APK-only', 'err'); break; }
+      var waSp = rest.indexOf(' ');
+      if (!rest) { tprint(A.whatsapp('', '')); break; }
+      var waNum = rest.slice(0, waSp < 0 ? 999 : waSp).replace(/[^0-9+]/g, '');
+      var waMsg = waSp < 0 ? '' : rest.slice(waSp + 1);
+      tprint(A.whatsapp(waNum, waMsg)); break;
+    }
+    case 'home': case 'close': {
+      if (!A) { tprint('APK-only', 'err'); break; }
+      if (cmd === 'close' && rest) { tprint(A.home() + ' (note: Android true force-close ke liye root chahiye — home bhej diya)'); break; }
+      tprint(A.home()); break;
+    }
+    case 'url': case 'openurl': {
+      if (!A) { tprint('APK-only', 'err'); break; }
+      if (!rest) { tprint('url <website> — jaise: url github.com', 'err'); break; }
+      tprint(A.openUrl(rest)); break;
+    }
+    case 'note': {
+      if (!rest) { tprint('note <text> — note save hota hai', 'err'); break; }
+      var n = 1;
+      while (('/home/noora/notes/note' + n + '.txt') in vfs) n++;
+      vfs['/home/noora/notes/note' + n + '.txt'] = rest;
+      saveVfs();
+      tprint('Note save: note' + n + '.txt (notes se dekho)');
+      break;
+    }
+    case 'notes': {
+      var ns = Object.keys(vfs).filter(function(k){ return k.startsWith('/home/noora/notes/'); });
+      if (!ns.length) { tprint('koi note nahi — note <text> se banao'); break; }
+      ns.forEach(function(k){ tprint('--- ' + k + ' ---'); tprint(vfs[k].slice(0, 200)); });
+      break;
+    }
     default: tprint('Command nahi mila: ' + cmd + ' — help likho', 'err');
   }
 }
@@ -317,6 +410,7 @@ function saveSet() {
   settings.key = document.getElementById('setKey').value.trim();
   settings.model = document.getElementById('setModel').value.trim();
   settings.base = document.getElementById('setBase').value.trim();
+  settings.pcCode = document.getElementById('setPcCode').value.trim();
   localStorage.setItem('dcdm_set', JSON.stringify(settings));
   A && A.toast('Settings save ho gayi ✅');
 }
@@ -331,7 +425,9 @@ if (settings.provider) document.getElementById('setProvider').value = settings.p
 document.getElementById('setKey').value = settings.key || '';
 document.getElementById('setModel').value = settings.model || '';
 document.getElementById('setBase').value = settings.base || '';
+document.getElementById('setPcCode').value = settings.pcCode || '';
 provChange();
+updateModeUI();
 addMsg('⚡ Salaam Noora! Main ab tumhare phone pe chal raha hoon — apne APK mein, apne terminal ke saath! 🖥️\n\nTerminal (🖥️ tab) mein help likho — call, sms, torch, apps, JavaScript sab chalta hai. Bina Termux ke! 💪', 'bot');
 document.getElementById('termInput').addEventListener('click', function(){});
 tprint('DEV CRAFT TERMINAL v1.0 — apna Termux 💪\nType help for commands\n');
