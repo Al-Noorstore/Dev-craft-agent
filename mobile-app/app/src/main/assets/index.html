@@ -194,6 +194,7 @@ var HELP = 'DEV CRAFT TERMINAL v1.0 — apna Termux 💪\n' +
 'speak <text>            bolo (TTS)\n' +
 'sysinfo                 phone ki info\n' +
 'share <text>            share menu\n' +
+'install <app>          Play Store se install (page kholega)\n' +
 'perms                   permissions check\n' +
 'clear                   screen saaf';
 var termHistory = [], hIdx = -1;
@@ -290,6 +291,13 @@ function exec(line) {
     case 'sysinfo': {
       var b = A ? A.battery() : '?';
       tprint('Device: ' + (A ? A.info() : 'browser test mode') + '\nBattery: ' + b + '\nCWD: ' + cwd + '\nFiles: ' + Object.keys(vfs).length);
+      break;
+    }
+    case 'install': {
+      if (!A) { tprint('APK-only power', 'err'); break; }
+      if (!rest) { tprint('install <app ka naam ya package> — jaise: install whatsapp', 'err'); break; }
+      tprint(A.installApp(rest));
+      tprint('(Android security: koi bhi app chupke install NAHI hota - ek tap Install tumhe karna hoga)');
       break;
     }
     case 'perms': { if (A) tprint(A.askPerms()); else tprint('APK-only', 'err'); break; }

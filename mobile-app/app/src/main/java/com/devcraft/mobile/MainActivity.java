@@ -269,6 +269,33 @@ public class MainActivity extends Activity {
         }
 
         @JavascriptInterface
+        public String installApp(final String query) {
+            final boolean isPkg = query != null && query.contains(".") && !query.contains(" ");
+            runOnUiThread(new Runnable() {
+                public void run() {
+                    try {
+                        String uri = isPkg ? ("market://details?id=" + query) : ("market://search?q=" + Uri.encode(query));
+                        Intent i = new Intent(Intent.ACTION_VIEW, Uri.parse(uri));
+                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(i);
+                    } catch (Exception e) {
+                        try {
+                            String url = isPkg ? ("https://play.google.com/store/apps/details?id=" + query)
+                                    : ("https://play.google.com/store/search?q=" + Uri.encode(query));
+                            Intent b = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                            b.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            startActivity(b);
+                        } catch (Exception e2) {
+                            Toast.makeText(MainActivity.this, "Play Store nahi mila", Toast.LENGTH_SHORT).show();
+                        }
+                    }
+                }
+            });
+            return isPkg ? ("PLAY_STORE: " + query + " ka page khul gaya - Install dabao")
+                        : ("PLAY_STORE: '" + query + "' search khul gayi - app chuno, Install dabao");
+        }
+
+        @JavascriptInterface
         public String askPerms() {
             askPerm(null);
             String call = hasPerm("android.permission.CALL_PHONE") ? "OK" : "NAHI";
