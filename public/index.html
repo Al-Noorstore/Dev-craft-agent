@@ -248,6 +248,19 @@
     #termRow button { padding: 11px 14px; }
     .cmd-block { font-size: 11.5px; padding: 10px; }
     .cmd-block .cpy { padding: 5px 12px; font-size: 12px; }
+  /* ===== ADMIN PANEL ===== */
+  .admin-tab { flex:1; text-align:center; padding:9px; border:2px solid var(--border); border-radius:10px; font-size:13px; font-weight:700; color:var(--text-muted); cursor:pointer; }
+  .admin-tab.active { border-color: var(--primary); color: var(--primary); }
+  .key-row { display:flex; align-items:center; gap:8px; padding:10px 12px; border:1px solid var(--border); border-radius:12px; margin-bottom:8px; background:var(--bg); }
+  .key-name { font-size:13px; font-weight:700; }
+  .key-val { font-size:12px; color:var(--text-muted); font-family:monospace; word-break:break-all; }
+  .key-actions { display:flex; gap:4px; flex:0 0 auto; }
+  .key-actions button { border:1px solid var(--border); background:var(--card); border-radius:8px; padding:5px 7px; cursor:pointer; font-size:13px; }
+  .key-actions button:hover { border-color:var(--primary); }
+  .admin-sysinfo .sys-row { display:flex; justify-content:space-between; padding:8px 0; border-bottom:1px solid var(--border); font-size:13px; }
+  .admin-sysinfo .sys-row span { color:var(--text-muted); }
+  #adminToast { position:fixed; bottom:74px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--card); color:var(--primary); border:1px solid var(--primary); padding:9px 16px; border-radius:10px; font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition:all .2s; z-index:120; box-shadow:0 6px 20px rgba(0,0,0,.15); max-width:90%; text-align:center; }
+  #adminToast.show { opacity:1; transform:translateX(-50%) translateY(0); }
     .set-box { padding: 16px 14px; max-height: 88vh; }
     .login-card { padding: 22px 18px 18px; }
     .pairing-code { font-size: 22px; letter-spacing: 3px; }
@@ -269,6 +282,7 @@
     <div class="menu-item" onclick="showTerminal()"><span class="ic">⌨️</span> Terminal</div>
     <div class="menu-item" onclick="showMcp()"><span class="ic">🔌</span> Connect MCP</div>
     <div class="menu-item" onclick="showDownload()"><span class="ic">⬇️</span> Download App</div>
+    <div class="menu-item" onclick="openAdmin()"><span class="ic">🛡️</span> Admin Panel</div>
     <div class="menu-item" onclick="openSettings()"><span class="ic">⚙️</span> Settings</div>
     <div class="side-label">CHAT HISTORY</div>
     <div id="convList"></div>
@@ -426,6 +440,65 @@
       <div class="set-actions
         <button class="ghost-btn" onclick="closeSettings()">Cancel</button>
         <button class="primary-btn" style="width:auto;flex:1" onclick="saveSettings()">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== ADMIN PANEL MODAL ===== -->
+  <div id="adminModal" onclick="if(event.target===this)closeAdmin()">
+    <div class="set-box" style="max-width:440px">
+      <!-- PIN GATE -->
+      <div id="adminGate">
+        <h3>🛡️ Admin Panel</h3>
+        <div id="gateSetup" style="display:none">
+          <div class="set-label" style="margin-top:0">Pehli baar — Admin PIN banao (4+ digits)</div>
+          <input type="password" id="adminPin1" class="set-input" placeholder="Naya PIN" inputmode="numeric">
+          <div class="set-label">PIN dobara likho</div>
+          <input type="password" id="adminPin2" class="set-input" placeholder="PIN confirm" inputmode="numeric" onkeydown="if(event.key==='Enter')setAdminPin()">
+          <button class="primary-btn" style="width:100%;margin-top:14px" onclick="setAdminPin()">PIN Set Karo 🔐</button>
+          <div class="set-hint">Ye PIN sirf is browser ke liye hai. Bhool gaye? Browser ke site data clear karlo.</div>
+        </div>
+        <div id="gateLogin" style="display:none">
+          <div class="set-label" style="margin-top:0">Admin PIN dalo</div>
+          <input type="password" id="adminPinIn" class="set-input" placeholder="PIN" inputmode="numeric" onkeydown="if(event.key==='Enter')tryAdminPin()">
+          <button class="primary-btn" style="width:100%;margin-top:14px" onclick="tryAdminPin()">Unlock 🔓</button>
+          <div class="set-hint">Ghalat try se lock nahi hota — par keys private hain, PIN mat batana.</div>
+        </div>
+      </div>
+      <!-- MAIN PANEL -->
+      <div id="adminMain" style="display:none">
+        <h3>🛡️ Admin Panel</h3>
+        <div style="display:flex;gap:6px;margin-bottom:14px">
+          <div class="admin-tab active" id="atab-keys" onclick="adminTab('keys')">🔑 API Keys</div>
+          <div class="admin-tab" id="atab-sys" onclick="adminTab('sys')">ℹ️ System</div>
+        </div>
+        <div id="atabView-keys">
+          <div class="set-label" style="margin-top:0">➕ Nayi key add karo</div>
+          <input type="text" id="keyNameIn" class="set-input" placeholder="Naam — jaise: Gemini, OpenAI, GitHub">
+          <input type="text" id="keyValIn" class="set-input" placeholder="Key paste karo (AIza... / sk-...)" style="margin-top:8px">
+          <button class="primary-btn" style="width:100%;margin-top:10px" onclick="addAdminKey()">➕ Add Key</button>
+          <div id="editKeyBox" style="display:none">
+            <div class="set-label" style="margin-top:16px">✏️ Key update karo</div>
+            <input type="text" id="editKeyName" class="set-input" placeholder="Naam">
+            <input type="text" id="editKeyVal" class="set-input" placeholder="Nayi value (khaali = purani rahegi)" style="margin-top:8px">
+            <div style="display:flex;gap:8px;margin-top:10px">
+              <button class="ghost-btn" style="flex:1" onclick="cancelKeyEdit()">Cancel</button>
+              <button class="primary-btn" style="flex:1" onclick="saveKeyEdit()">💾 Update</button>
+            </div>
+          </div>
+          <div class="set-label">Meri keys (<span id="keyCount">0</span>)</div>
+          <div id="keyList"></div>
+          <div class="set-hint" style="margin-top:12px">🔐 Keys sirf IS browser mein (localStorage) rehti hain — server pe nahi jatin. Copy button se kahin bhi use karo.</div>
+        </div>
+        <div id="atabView-sys" style="display:none">
+          <div class="set-label" style="margin-top:0">App info</div>
+          <div id="sysInfo" class="admin-sysinfo"></div>
+          <div class="set-label" style="margin-top:16px">🛡️ Safety</div>
+          <div class="set-hint">Self-update (agent khud bugs/features add kare — backup + test ke saath) agle update mein aa raha hai. Filhar har change GitHub se hota hai, git history = automatic backup.</div>
+        </div>
+        <div style="display:flex;gap:8px;margin-top:16px">
+          <button class="ghost-btn" style="flex:1" onclick="closeAdmin()">Band karo</button>
+        </div>
       </div>
     </div>
   </div>
@@ -1504,6 +1577,150 @@
       }
     });
   })();
+  // ====== ADMIN PANEL (API Key Manager + PIN lock) ======
+  let adminKeys = JSON.parse(localStorage.getItem('dc_admin_keys') || '[]');
+  let editingKeyId = null, revealedKeys = {}, adminToastT = null;
+
+  function openAdmin() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('adminModal').classList.add('open');
+    document.getElementById('adminGate').style.display = '';
+    document.getElementById('adminMain').style.display = 'none';
+    const hasPin = !!localStorage.getItem('dc_admin_pin');
+    document.getElementById('gateSetup').style.display = hasPin ? 'none' : '';
+    document.getElementById('gateLogin').style.display = hasPin ? '' : 'none';
+    if (hasPin) { document.getElementById('adminPinIn').value = ''; setTimeout(function(){ document.getElementById('adminPinIn').focus(); }, 120); }
+  }
+  function closeAdmin() { document.getElementById('adminModal').classList.remove('open'); }
+  function setAdminPin() {
+    const p1 = document.getElementById('adminPin1').value.trim();
+    const p2 = document.getElementById('adminPin2').value.trim();
+    if (p1.length < 4) return adminToast('PIN kam se kam 4 digit ka ho');
+    if (p1 !== p2) return adminToast('Dono PIN match nahi ho rahe');
+    localStorage.setItem('dc_admin_pin', p1);
+    showAdminMain();
+  }
+  function tryAdminPin() {
+    const p = document.getElementById('adminPinIn').value.trim();
+    if (p === localStorage.getItem('dc_admin_pin')) showAdminMain();
+    else adminToast('Ghalat PIN ❌');
+  }
+  function showAdminMain() {
+    document.getElementById('adminGate').style.display = 'none';
+    document.getElementById('adminMain').style.display = '';
+    adminTab('keys'); renderAdminKeys(); renderSysInfo();
+  }
+  function adminTab(t) {
+    document.getElementById('atabView-keys').style.display = t === 'keys' ? '' : 'none';
+    document.getElementById('atabView-sys').style.display = t === 'sys' ? '' : 'none';
+    document.getElementById('atab-keys').classList.toggle('active', t === 'keys');
+    document.getElementById('atab-sys').classList.toggle('active', t === 'sys');
+  }
+  function maskKey(k) {
+    if (!k) return '';
+    if (k.length <= 8) return k.slice(0, 2) + '••••••';
+    return k.slice(0, 4) + '••••••••' + k.slice(-4);
+  }
+  function saveAdminKeys() { localStorage.setItem('dc_admin_keys', JSON.stringify(adminKeys)); }
+  function addAdminKey() {
+    const name = document.getElementById('keyNameIn').value.trim();
+    const val = document.getElementById('keyValIn').value.trim();
+    if (!name || !val) return adminToast('Naam aur key dono likho');
+    if (adminKeys.some(function(k){ return k.name.toLowerCase() === name.toLowerCase(); })) return adminToast('Ye naam pehle se hai — usse edit karo');
+    adminKeys.push({ id: Date.now(), name: name, key: val, created: Date.now() });
+    saveAdminKeys();
+    document.getElementById('keyNameIn').value = '';
+    document.getElementById('keyValIn').value = '';
+    renderAdminKeys();
+    adminToast('Key add ho gayi ✅');
+  }
+  function renderAdminKeys() {
+    const list = document.getElementById('keyList');
+    if (!list) return;
+    document.getElementById('keyCount').textContent = adminKeys.length;
+    if (!adminKeys.length) { list.innerHTML = '<div class="set-hint">Abhi koi key nahi — upar se add karo.</div>'; return; }
+    list.innerHTML = adminKeys.map(function(k) {
+      const shown = revealedKeys[k.id] ? esc(k.key) : esc(maskKey(k.key));
+      return '<div class="key-row">' +
+        '<div style="flex:1;min-width:0">' +
+          '<div class="key-name">' + esc(k.name) + '</div>' +
+          '<div class="key-val">' + shown + '</div>' +
+        '</div>' +
+        '<div class="key-actions">' +
+          '<button title="Copy key" onclick="copyAdminKey(' + k.id + ')">📋</button>' +
+          '<button title="Dikhao / Chupao" onclick="toggleReveal(' + k.id + ')">' + (revealedKeys[k.id] ? '🙈' : '👁') + '</button>' +
+          '<button title="Edit" onclick="editKeyStart(' + k.id + ')">✏️</button>' +
+          '<button title="Delete" onclick="delAdminKey(' + k.id + ')">🗑</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  }
+  function toggleReveal(id) { revealedKeys[id] = !revealedKeys[id]; renderAdminKeys(); }
+  function copyAdminKey(id) {
+    const k = adminKeys.find(function(x){ return x.id === id; });
+    if (!k) return;
+    const done = function(){ adminToast(k.name + ' ki key copy ho gayi 📋'); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(k.key).then(done).catch(function(){ fallbackCopy(k.key, done); });
+    } else fallbackCopy(k.key, done);
+  }
+  function fallbackCopy(text, done) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch (e) { adminToast('Copy fail — value dikhao aur manually select karo'); }
+    document.body.removeChild(ta);
+  }
+  function editKeyStart(id) {
+    const k = adminKeys.find(function(x){ return x.id === id; });
+    if (!k) return;
+    editingKeyId = id;
+    document.getElementById('editKeyBox').style.display = '';
+    document.getElementById('editKeyName').value = k.name;
+    document.getElementById('editKeyVal').value = '';
+  }
+  function cancelKeyEdit() { editingKeyId = null; document.getElementById('editKeyBox').style.display = 'none'; }
+  function saveKeyEdit() {
+    const k = adminKeys.find(function(x){ return x.id === editingKeyId; });
+    if (!k) return;
+    const nn = document.getElementById('editKeyName').value.trim();
+    const nv = document.getElementById('editKeyVal').value.trim();
+    if (!nn) return adminToast('Naam khaali nahi ho sakta');
+    if (nn !== k.name && adminKeys.some(function(x){ return x.id !== editingKeyId && x.name.toLowerCase() === nn.toLowerCase(); })) return adminToast('Ye naam pehle se hai');
+    k.name = nn;
+    if (nv) k.key = nv;
+    k.updated = Date.now();
+    saveAdminKeys(); cancelKeyEdit(); renderAdminKeys();
+    adminToast('Key update ho gayi ✅');
+  }
+  function delAdminKey(id) {
+    const k = adminKeys.find(function(x){ return x.id === id; });
+    if (!k) return;
+    if (!confirm('"' + k.name + '" key delete karni hai? Wapas nahi aayegi.')) return;
+    adminKeys = adminKeys.filter(function(x){ return x.id !== id; });
+    delete revealedKeys[id];
+    saveAdminKeys(); renderAdminKeys();
+    adminToast('Key delete ho gayi 🗑');
+  }
+  function renderSysInfo() {
+    const el = document.getElementById('sysInfo');
+    if (!el) return;
+    el.innerHTML =
+      '<div class="sys-row"><span>App</span><b>Dev Craft Agent</b></div>' +
+      '<div class="sys-row"><span>URL</span><b>dev-craft-agent.vercel.app</b></div>' +
+      '<div class="sys-row"><span>Keys saved</span><b>' + adminKeys.length + '</b></div>' +
+      '<div class="sys-row"><span>Chats</span><b>' + conversations.length + '</b></div>' +
+      '<div class="sys-row"><span>AI Provider</span><b>' + (settings.provider || 'openai') + '</b></div>' +
+      '<div class="sys-row"><span>PC Bridge</span><b>' + (pairedCode ? 'Paired ✅' : 'Not paired') + '</b></div>';
+  }
+  function adminToast(msg) {
+    let t = document.getElementById('adminToast');
+    if (!t) { t = document.createElement('div'); t.id = 'adminToast'; document.body.appendChild(t); }
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(adminToastT);
+    adminToastT = setTimeout(function(){ t.classList.remove('show'); }, 2400);
+  }
 </script>
 </body>
 </html>
