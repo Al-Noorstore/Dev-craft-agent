@@ -843,6 +843,7 @@ http.createServer((req, res) => {
   if (req.method === 'GET' && (req.url === '/' || req.url.startsWith('/index'))) { res.setHeader('Content-Type', 'text/html; charset=utf-8'); return res.end(HTML); }
   if (req.method === 'GET' && req.url === '/api/credentials') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(vaultList())); }
   if (req.method === 'GET' && req.url === '/api/bridge/status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(bridgeStatus())); }
+  if (req.method === 'GET' && req.url === '/api/sysinfo') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ node: process.version, platform: process.platform })); }
   if (req.method === 'GET' && req.url === '/api/models') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running, active_model: ollamaCfg().model }))).catch(() => res.end(JSON.stringify({ models: [], installed: false, running: false }))); return; }
   if (req.method === 'GET' && req.url === '/api/ollama/pull_status') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ state: ollamaPullState, models: d.models, running: d.running }))).catch(() => res.end(JSON.stringify({ state: ollamaPullState, models: [], running: false }))); return; }
   if (req.method === 'GET' && req.url === '/api/ollama/install_status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(_ollamaInstallState)); }
@@ -857,6 +858,9 @@ http.createServer((req, res) => {
         catch (e) { return res.end(JSON.stringify({ models: [], installed: false, running: false })); }
       }
       if (req.url === '/api/ollama/pull') return res.end(JSON.stringify(await ollamaPullRequest(body.model)));
+      if (req.url === '/api/sysinfo') {
+        return res.end(JSON.stringify({ node: process.version, platform: process.platform }));
+      }
       if (req.url === '/api/brain-key') {
         try {
           const r = await fetch('https://dev-craft-agent.vercel.app/api/brain-key', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ pass: String(body.pass || '') }) });
