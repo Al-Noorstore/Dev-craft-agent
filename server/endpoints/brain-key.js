@@ -6,7 +6,7 @@
 // ============================================
 const crypto = require('crypto');
 
-const PASS_HASH = '412d33bcc43cd7591f7867d204e0b4c10506d2daaf7c5436e1a9ba4d10d03096';
+const PASS_HASH = '0b3e54bd1e443729172a5c5c12078ab040371fc08cdbf7fa7b4ac186a1823171';
 
 module.exports = async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -18,7 +18,7 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const pass = String(body.pass || '');
     const given = crypto.createHash('sha256').update(pass).digest('hex');
-    if (given !== PASS_HASH) return res.status(403).json({ ok: false, error: 'Passphrase ghalat hai — jo Noora ko chat mein diya gaya wahi dabao' });
+    if (given !== PASS_HASH) return res.status(403).json({ ok: false, error: 'Passphrase ghalat hai — jo tumne set kiya hai (chhota, yaad rakhne wala)' });
     const key = process.env.GEMINI_API_KEY || process.env.OPENAI_API_KEY || '';
     if (!key) return res.status(500).json({ ok: false, error: 'Server pe koi key set nahi hai' });
     return res.status(200).json({
