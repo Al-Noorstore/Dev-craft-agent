@@ -212,6 +212,9 @@ async function mcpCallToolFn(url, token, toolName, args) {
 }
 
 // ---------- TOOLS (OpenClaw powers) ----------
+// Gemini key auto-fix: naye keys "AQ." se shuru hote hain; user ne bina AQ. paste kiya to khud laga do (purani AIza... keys ko mat chhedo)
+const geminiKeyFix = k => (/^(AQ\.|AIza)/.test(k) ? k : 'AQ.' + k);
+
 const BRAIN_PROVIDERS = {
   gemini:    { url: 'https://generativelanguage.googleapis.com/v1beta/openai/chat/completions', model: 'gemini-3.6-flash', label: 'Google Gemini' },
   openai:    { url: 'https://api.openai.com/v1/chat/completions', model: 'gpt-4o-mini', label: 'OpenAI' },
@@ -643,6 +646,7 @@ async function chat(req, res, body) {
   const BRAIN_URL = effUrl || (effProv === 'custom' ? (base_url || '').replace(/\/+$/, '') + '/chat/completions' : BRAIN_PROVIDERS[effProv].url);
   const brainModel = effModel || (effProv === 'custom' ? 'custom-model' : BRAIN_PROVIDERS[effProv].model);
   if (!effKey) return res.end(JSON.stringify({ error: 'API key missing - Settings (⚙️) kholo, apna AI chuno (✨ Gemini FREE, ⚡ Groq FREE, 🔗 OpenRouter...) aur key paste karo. Ya 🦙 Ollama (offline, free) select karo.' }));
+  if (effProv === 'gemini') effKey = geminiKeyFix(effKey);
   if (provider === 'custom' && !base_url && !effUrl) return res.end(JSON.stringify({ error: 'Custom API ke liye Base URL Settings mein daalo' }));
   const messages = [{ role: 'system', content: sysPrompt }, ...(Array.isArray(history) ? history.slice(-10) : []), { role: 'user', content: message }];
   const jarvisSays = [];
@@ -887,7 +891,8 @@ http.createServer((req, res) => {
           if (effProv !== 'custom' && !key) return res.end(JSON.stringify({ ok: false, error: 'API key khali hai — pehle key paste karo (Settings tile ke neeche likha hai kahan se milegi).' }));
           const TURL = effProv === 'custom' ? (tbase.replace(/\/+$/, '') + '/chat/completions') : BRAIN_PROVIDERS[effProv].url;
           const TMODEL = tmodel || (effProv === 'custom' ? 'custom-model' : BRAIN_PROVIDERS[effProv].model);
-          const r = await fetch(TURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key }, body: JSON.stringify({ model: TMODEL, messages: [{ role: 'user', content: 'Reply with exactly: OK' }], max_tokens: 10 }) });
+          const tkey = effProv === 'gemini' ? geminiKeyFix(key) : key;
+          const r = await fetch(TURL, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + tkey }, body: JSON.stringify({ model: TMODEL, messages: [{ role: 'user', content: 'Reply with exactly: OK' }], max_tokens: 10 }) });
           const txt = await r.text();
           if (r.ok) {
             let reply = ''; try { const d = JSON.parse(txt); reply = (d.choices && d.choices[0] && d.choices[0].message && d.choices[0].message.content) || ''; } catch (e) {}
@@ -895,7 +900,7 @@ http.createServer((req, res) => {
           }
           let msg = txt.slice(0, 200);
           try { const d = JSON.parse(txt); msg = (d.error && (d.error.message || d.error)) || (d.message) || msg; } catch (e) {}
-          if (r.status === 401 || r.status === 403 || (r.status === 400 && /valid api key|invalid api|api key not valid/i.test(msg))) msg = 'Key GHALAT hai (provider ne reject kar diya) — ' + msg;
+          if (r.status === 401 || r.status === 403 || (r.status === 400 && /valid api key|invalid api|api key not valid|pass a valid/i.test(msg))) msg = (effProv === 'gemini' ? 'Key GHALAT lag rahi hai — Gemini ki NAYI key "AQ." se shuru hoti hai, poora paste karo (aistudio.google.com/apikeys). — ' : 'Key GHALAT hai (provider ne reject kar diya) — ') + msg;
           if (r.status === 404 && /model/i.test(msg)) msg = 'Model ghalat hai: ' + TMODEL + ' — Model field khali chhodo (auto best) — ' + msg;
           return res.end(JSON.stringify({ ok: false, status: r.status, error: msg }));
         } catch (e) { return res.end(JSON.stringify({ ok: false, error: 'Network error: ' + e.message + ' — internet check karo.' })); }

@@ -87,7 +87,7 @@
   <div id="chat">
     <div class="welcome">
       <div class="big">⚡</div>
-      <h2>Dev Craft Agent — Desktop <span id="verBadge" style="font-size:12px;color:var(--text-muted,#888);background:rgba(0,0,0,.06);padding:2px 8px;border-radius:10px;vertical-align:middle">v1.23</span></h2>
+      <h2>Dev Craft Agent — Desktop <span id="verBadge" style="font-size:12px;color:var(--text-muted,#888);background:rgba(0,0,0,.06);padding:2px 8px;border-radius:10px;vertical-align:middle">v1.24</span></h2>
       <p>OpenClaw powers: terminal, files/folders, apps, YouTube — sab tumhare PC pe.<br>Settings (⚙️) mein koi bhi AI chuno — ✨ Gemini FREE, ⚡ Groq FREE, ya 🦙 Ollama offline.</p>
       <div class="quick">
         <button onclick="quick('Mere Downloads folder mein kya hai?')">📂 Downloads folder dekho</button>
@@ -366,7 +366,7 @@
       document.getElementById('keyHint').innerHTML = AI_INFO[p].hint + ' — key sirf tumhare PC pe save hoti hai ✅';
     }
   }
-  (async function(){ try { const r = await fetch('/api/sysinfo'); const d = await r.json(); const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.23 · ' + d.node + ' · ' + d.platform; } catch(e){ const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.23'; } })();
+  (async function(){ try { const r = await fetch('/api/sysinfo'); const d = await r.json(); const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.24 · ' + d.node + ' · ' + d.platform; } catch(e){ const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.24'; } })();
   async function cloudKeyNow() {
     const pass = prompt('Passphrase likho (Noora ke chat mein diya gaya hai):');
     if (!pass) return;
