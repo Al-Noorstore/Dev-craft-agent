@@ -263,6 +263,12 @@
   .admin-sysinfo .sys-row span { color:var(--text-muted); }
   #adminToast { position:fixed; bottom:74px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--card); color:var(--primary); border:1px solid var(--primary); padding:9px 16px; border-radius:10px; font-size:13px; font-weight:600; opacity:0; pointer-events:none; transition:all .2s; z-index:120; box-shadow:0 6px 20px rgba(0,0,0,.15); max-width:90%; text-align:center; }
   #adminToast.show { opacity:1; transform:translateX(-50%) translateY(0); }
+  .dlv-card { border:1px solid var(--border); border-radius:12px; padding:12px; margin-bottom:10px; background:var(--bg); }
+  .dlv-head { display:flex; gap:10px; align-items:flex-start; }
+  .dlv-ic { font-size:22px; line-height:1; }
+  .dlv-sub { font-size:12px; color:var(--text-muted); margin-top:2px; }
+  .dlv-meta { font-size:11px; color:var(--text-faint); margin:8px 0; }
+  .dlv-btn { display:block; width:100%; text-align:center; text-decoration:none; margin-top:4px; font-size:13px; padding:10px; }
     .set-box { padding: 16px 14px; max-height: 88vh; }
     .login-card { padding: 22px 18px 18px; }
     .pairing-code { font-size: 22px; letter-spacing: 3px; }
@@ -471,7 +477,8 @@
       <div id="adminMain" style="display:none">
         <h3>🛡️ Admin Panel</h3>
         <div style="display:flex;gap:6px;margin-bottom:14px">
-          <div class="admin-tab active" id="atab-keys" onclick="adminTab('keys')">🔑 API Keys</div>
+          <div class="admin-tab active" id="atab-keys" onclick="adminTab('keys')">🔑 Keys</div>
+          <div class="admin-tab" id="atab-dl" onclick="adminTab('dl')">⬇️ Download</div>
           <div class="admin-tab" id="atab-sys" onclick="adminTab('sys')">ℹ️ System</div>
         </div>
         <div id="atabView-keys">
@@ -491,6 +498,25 @@
           <div class="set-label">Meri keys (<span id="keyCount">0</span>)</div>
           <div id="keyList"></div>
           <div class="set-hint" style="margin-top:12px">🔐 Keys sirf IS browser mein (localStorage) rehti hain — server pe nahi jatin. Copy button se kahin bhi use karo.</div>
+        </div>
+        <div id="atabView-dl" style="display:none">
+          <div class="set-label" style="margin-top:0">📦 Dev Craft Agent — Saare Versions Download</div>
+          <div class="dlv-card">
+            <div class="dlv-head"><span class="dlv-ic">☁️</span><div><b>Cloud Version (Complete)</b><div class="dlv-sub">Poora website + server — bilkul jaise ab host hai. Vercel pe deploy ya khud chalao.</div></div></div>
+            <div class="dlv-meta">ZIP ~355 KB • public/ api/ server/ • Supabase SQL • README included</div>
+            <a class="primary-btn dlv-btn" href="https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/3eac2d677_DevCraft-Cloud-v126.zip" download="DevCraft-Cloud-v126.zip">⬇️ Download Cloud ZIP</a>
+          </div>
+          <div class="dlv-card">
+            <div class="dlv-head"><span class="dlv-ic">💻</span><div><b>Desktop Version (Local PC)</b><div class="dlv-sub">Laptop/PC ke liye — offline agent: terminal, files, apps, YouTube, WhatsApp Web, Ollama. v1.26.</div></div></div>
+            <div class="dlv-meta">ZIP ~47 KB • 4 files • Node.js 18+ • koi install nahi</div>
+            <a class="primary-btn dlv-btn" href="https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/2be5e955f_DevCraft-Desktop-v126.zip" download="DevCraft-Desktop-v126.zip">⬇️ Download Desktop ZIP</a>
+          </div>
+          <div class="dlv-card">
+            <div class="dlv-head"><span class="dlv-ic">📱</span><div><b>Mobile Version</b><div class="dlv-sub">Termux agent (phone ko website Terminal se connect karo) + native Android APK project (call, sms, torch, AI chat).</div></div></div>
+            <div class="dlv-meta">ZIP ~16 KB • mobile-agent.js + mobile-app project • README included</div>
+            <a class="primary-btn dlv-btn" href="https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/c447364a6_DevCraft-Mobile-v1.zip" download="DevCraft-Mobile-v1.zip">⬇️ Download Mobile ZIP</a>
+          </div>
+          <div class="set-hint" style="margin-top:12px">💡 Cloud ZIP mein desktop + mobile dono ke source bhi hain — wo full backup hai. Ye alag ZIPs asani ke liye hain.</div>
         </div>
         <div id="atabView-sys" style="display:none">
           <div class="set-label" style="margin-top:0">App info</div>
@@ -855,6 +881,8 @@
 
   // ====== DOWNLOAD APP ======
   const DESKTOP_ZIP = 'https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/2be5e955f_DevCraft-Desktop-v126.zip';
+  const MOBILE_ZIP = 'https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/c447364a6_DevCraft-Mobile-v1.zip';
+  const CLOUD_ZIP = 'https://base44.app/api/apps/6a99e38422d61df47573a0a5/files/mp/public/6a99e38422d61df47573a0a5/3eac2d677_DevCraft-Cloud-v126.zip';
   const DL_GUIDES = {
     windows: { icon: '🪟', name: 'Windows', ver: 'Windows 10 / 11', steps: [
       '<b>Download App</b> button se ZIP download karo (neeche hai)',
@@ -1614,8 +1642,10 @@
   }
   function adminTab(t) {
     document.getElementById('atabView-keys').style.display = t === 'keys' ? '' : 'none';
+    document.getElementById('atabView-dl').style.display = t === 'dl' ? '' : 'none';
     document.getElementById('atabView-sys').style.display = t === 'sys' ? '' : 'none';
     document.getElementById('atab-keys').classList.toggle('active', t === 'keys');
+    document.getElementById('atab-dl').classList.toggle('active', t === 'dl');
     document.getElementById('atab-sys').classList.toggle('active', t === 'sys');
   }
   function maskKey(k) {
