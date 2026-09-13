@@ -32,7 +32,6 @@ function sh(command, timeoutMs = 30000) {
 }
 // ---------- OLLAMA: auto-detect + auto-start + one-click model download ----------
 let _ollamaServeTried = false;
-let ollamaPullState = null;
 async function ollamaInfo() {
   let running = false, models = [];
   try {
@@ -57,63 +56,6 @@ async function ollamaInfo() {
 const OLLAMA_CFG = path.join(os.homedir(), '.dev-craft', 'ollama.json');
 function ollamaCfg() { try { return JSON.parse(fs.readFileSync(OLLAMA_CFG, 'utf8')); } catch (e) { return {}; } }
 function ollamaCfgSet(model) { try { fs.mkdirSync(path.dirname(OLLAMA_CFG), { recursive: true }); fs.writeFileSync(OLLAMA_CFG, JSON.stringify({ model }, null, 2)); } catch (e) {} }
-async function ollamaPullRequest(model) {
-  model = String(model || 'llama3.2').replace(/[^a-zA-Z0-9._:-]/g, '').slice(0, 60) || 'llama3.2';
-  const d = await ollamaInfo();
-  if (!d.installed && !d.running) return { ok: false, error: 'Ollama install nahi — Settings ka "Install Ollama (auto)" button ya ollama.com (free)' };
-  if (!d.running) return { ok: false, error: 'Ollama server start nahi hua — Ollama app kholo ya "ollama serve" chalao' };
-  if (d.models.some(m => m.split(':')[0] === model.split(':')[0])) return { ok: true, already: true, models: d.models, model };
-  ollamaPullStart(model);
-  return { ok: true, started: true, model, note: 'Download background mein chal raha hai — "ollama status" se progress dekho (pct)' };
-}
-let _ollamaInstallState = { running: false, done: false, error: null, log: '' };
-function ollamaInstallStart() {
-  if (_ollamaInstallState.running) return { ok: true, started: true, note: 'install pehle se chal raha hai' };
-  const cmd = IS_WIN ? 'winget install -e --id Ollama.Ollama --accept-source-agreements --accept-package-agreements' : IS_MAC ? 'brew install ollama' : 'curl -fsSL https://ollama.com/install.sh | sh';
-  _ollamaInstallState = { running: true, done: false, error: null, log: '' };
-  try {
-    const p = spawn(cmd, { shell: true, windowsHide: true });
-    p.stdout.on('data', d => { _ollamaInstallState.log = (_ollamaInstallState.log + d.toString()).slice(-1500); });
-    p.stderr.on('data', d => { _ollamaInstallState.log = (_ollamaInstallState.log + d.toString()).slice(-1500); });
-    p.on('error', e => { _ollamaInstallState.running = false; _ollamaInstallState.error = String(e.message || e); });
-    p.on('close', async (code) => {
-      _ollamaInstallState.running = false;
-      if (code === 0) { _ollamaInstallState.done = true; _ollamaServeTried = false; }
-      else _ollamaInstallState.error = 'exit ' + code + ' — ' + _ollamaInstallState.log.slice(-200);
-    });
-    return { ok: true, started: true, cmd };
-  } catch (e) { _ollamaInstallState.running = false; _ollamaInstallState.error = String(e.message || e); return { ok: false, error: _ollamaInstallState.error }; }
-}
-function ollamaPullStart(model) {
-  if (ollamaPullState && !ollamaPullState.done && ollamaPullState.model === model) return ollamaPullState;
-  ollamaPullState = { model, pct: 0, status: 'starting', done: false, error: null };
-  (async () => {
-    try {
-      const r = await fetch('http://localhost:11434/api/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model, stream: true }) });
-      if (!r.ok) { const t = await r.text(); ollamaPullState.error = 'HTTP ' + r.status + ' ' + t.slice(0, 200); ollamaPullState.done = true; return; }
-      const reader = r.body.getReader(); const dec = new TextDecoder(); let buf = '';
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        let i;
-        while ((i = buf.indexOf('\n')) >= 0) {
-          const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
-          if (!line) continue;
-          try {
-            const d = JSON.parse(line);
-            if (d.error) { ollamaPullState.error = String(d.error); ollamaPullState.done = true; return; }
-            if (d.status) ollamaPullState.status = d.status;
-            if (d.total && d.completed) ollamaPullState.pct = Math.round(d.completed / d.total * 100);
-            if (d.status === 'success') { ollamaPullState.done = true; ollamaPullState.pct = 100; }
-          } catch (e) {}
-        }
-      }
-      if (!ollamaPullState.done && !ollamaPullState.error) ollamaPullState.done = true;
-    } catch (e) { ollamaPullState.error = String(e.message || e); ollamaPullState.done = true; }
-  })();
-  return ollamaPullState;
-}
 function openTarget(target) {
   if (IS_WIN) return sh('start "" "' + target.replace(/"/g, '') + '"', 8000);
   if (IS_MAC) return sh('open "' + target.replace(/"/g, '') + '"', 8000);
@@ -409,11 +351,11 @@ async function runTool(name, args, steps) {
     else if (name === 'ollama') {
       if (args.action === 'status') {
         const d = await ollamaInfo();
-        result = { installed: d.installed, running: d.running, models: d.models, active_model: ollamaCfg().model || 'llama3.2', download_progress: ollamaPullState, install_progress: _ollamaInstallState.running ? 'installing ollama...' : undefined };
+        result = { installed: d.installed, running: d.running, models: d.models, active_model: ollamaCfg().model || 'llama3.2' };
         if (!d.installed && !d.running) result.tip = 'Ollama install nahi — Settings (⚙️) mein "Install Ollama (auto)" button hai, ya ollama.com se. Bina iske bhi OpenAI/OpenRouter key ya free cloud se chal sakta hai.';
         title = '🦙 Ollama: ' + (d.running ? d.models.length + ' model(s) ready' : (d.installed ? 'server band (app khud start karegi)' : 'install nahi'));
       } else if (args.action === 'pull') {
-        result = await ollamaPullRequest(args.model); title = '🦙 Model download: ' + String(args.model || 'llama3.2');
+        result = { ok: false, error: 'Download feature remove ho gaya — user khud model install karta hai. Guide karo: terminal mein "ollama pull ' + String(args.model || 'llama3.2') + '" chalao, phir "ollama status" se check karo (phir select se active kar sakte ho).' }; title = '🦙 Model download (manual): ' + String(args.model || 'llama3.2');
       } else if (args.action === 'select') {
         const model = String(args.model || '').trim();
         const d = await ollamaInfo();
@@ -849,8 +791,6 @@ http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/api/bridge/status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(bridgeStatus())); }
   if (req.method === 'GET' && req.url === '/api/sysinfo') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify({ node: process.version, platform: process.platform })); }
   if (req.method === 'GET' && req.url === '/api/models') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running, active_model: ollamaCfg().model }))).catch(() => res.end(JSON.stringify({ models: [], installed: false, running: false }))); return; }
-  if (req.method === 'GET' && req.url === '/api/ollama/pull_status') { res.setHeader('Content-Type', 'application/json'); ollamaInfo().then(d => res.end(JSON.stringify({ state: ollamaPullState, models: d.models, running: d.running }))).catch(() => res.end(JSON.stringify({ state: ollamaPullState, models: [], running: false }))); return; }
-  if (req.method === 'GET' && req.url === '/api/ollama/install_status') { res.setHeader('Content-Type', 'application/json'); return res.end(JSON.stringify(_ollamaInstallState)); }
   if (req.method === 'POST') {
     let buf = '';
     req.on('data', c => buf += c);
@@ -861,7 +801,6 @@ http.createServer((req, res) => {
         try { const d = await ollamaInfo(); return res.end(JSON.stringify({ models: d.models, installed: d.installed, running: d.running })); }
         catch (e) { return res.end(JSON.stringify({ models: [], installed: false, running: false })); }
       }
-      if (req.url === '/api/ollama/pull') return res.end(JSON.stringify(await ollamaPullRequest(body.model)));
       if (req.url === '/api/sysinfo') {
         return res.end(JSON.stringify({ node: process.version, platform: process.platform }));
       }
@@ -881,8 +820,8 @@ http.createServer((req, res) => {
           const tbase = String(body.base_url || '').trim();
           if (prov === 'ollama') {
             const d = await ollamaInfo();
-            if (!d.installed) return res.end(JSON.stringify({ ok: false, error: 'Ollama install hi nahi hai — Settings mein "Install Ollama" button dabao ya ollama.com se install karo.' }));
-            if (!d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama installed hai lekin chal nahi raha — "ollama serve" terminal mein chalao, phir Settings dobara kholo.' }));
+            if (!d.installed) return res.end(JSON.stringify({ ok: false, error: 'Ollama install nahi hai — khud install karo: ollama.com/download (free), phir Settings mein 🔄 Refresh dabao.' }));
+            if (!d.running) return res.end(JSON.stringify({ ok: false, error: 'Ollama installed hai lekin server band hai — "ollama serve" terminal mein chalao ya Ollama app kholo, phir 🔄 Refresh dabao.' }));
             if (!d.models.length) return res.end(JSON.stringify({ ok: false, error: 'Ollama chal raha hai lekin koi model nahi — Settings mein "Download" se llama3.2 ya qwen2.5:3b utaro.' }));
             return res.end(JSON.stringify({ ok: true, reply: 'Ollama OK — models: ' + d.models.slice(0, 4).join(', ') }));
           }
@@ -913,7 +852,6 @@ http.createServer((req, res) => {
         ollamaCfgSet(model);
         return res.end(JSON.stringify({ ok: true, active_model: model }));
       }
-      if (req.url === '/api/ollama/install') return res.end(JSON.stringify(ollamaInstallStart()));
       if (req.url === '/api/ping') return res.end(JSON.stringify({ ok: true, app: 'Dev Craft Desktop v1', os: os.type() }));
       if (req.url === '/api/exec') {
         try {

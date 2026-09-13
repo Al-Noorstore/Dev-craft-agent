@@ -87,7 +87,7 @@
   <div id="chat">
     <div class="welcome">
       <div class="big">⚡</div>
-      <h2>Dev Craft Agent — Desktop <span id="verBadge" style="font-size:12px;color:var(--text-muted,#888);background:rgba(0,0,0,.06);padding:2px 8px;border-radius:10px;vertical-align:middle">v1.25</span></h2>
+      <h2>Dev Craft Agent — Desktop <span id="verBadge" style="font-size:12px;color:var(--text-muted,#888);background:rgba(0,0,0,.06);padding:2px 8px;border-radius:10px;vertical-align:middle">v1.26</span></h2>
       <p>OpenClaw powers: terminal, files/folders, apps, YouTube — sab tumhare PC pe.<br>Settings (⚙️) mein koi bhi AI chuno — ✨ Gemini FREE, ⚡ Groq FREE, ya 🦙 Ollama offline.</p>
       <div class="quick">
         <button onclick="quick('Mere Downloads folder mein kya hai?')">📂 Downloads folder dekho</button>
@@ -160,30 +160,13 @@
         <div class="set-hint" id="ollamaStatus" style="margin:0 0 8px">🦙 Ollama check ho raha hai…</div>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button class="btn save" style="width:auto;padding:8px 14px;font-size:13px" onclick="testKeyNow()">🔍 Test Ollama</button>
+          <button class="btn save" style="width:auto;padding:8px 14px;font-size:13px;background:var(--pill)" onclick="ollamaRefresh(true)">🔄 Refresh</button>
         </div>
         <div class="set-hint" id="testKeyResultOl" style="display:none;margin-top:6px;white-space:pre-wrap"></div>
-        <div class="set-label">Ollama Model (installed)</div>
-        <select id="setOllamaModel" class="set-input"><option value="llama3.2">llama3.2</option></select>
-        <div class="set-label" style="margin-top:12px">Naya model download karo (auto)</div>
-        <div style="display:flex;gap:8px">
-          <input type="text" id="ollamaPullModel" class="set-input" placeholder="llama3.2" value="llama3.2" style="flex:1">
-          <button class="mini-btn" style="margin-top:0;padding:8px 12px;font-size:12px" onclick="ollamaPullGo()">⬇️ Download</button>
-        </div>
-        <div style="margin-top:6px">
-          <button class="mini-btn" onclick="ollamaQuick(this,'llama3.2')">llama3.2 (~2GB)</button>
-          <button class="mini-btn" onclick="ollamaQuick(this,'qwen2.5:3b')">qwen2.5:3b</button>
-          <button class="mini-btn" onclick="ollamaQuick(this,'gemma2:2b')">gemma2:2b</button>
-          <button class="mini-btn" onclick="ollamaQuick(this,'phi3:mini')">phi3:mini</button>
-        </div>
-        <div class="set-hint" id="ollamaPullProg" style="display:none;color:var(--primary)">
-          <div style="height:9px;background:var(--pill);border-radius:5px;overflow:hidden;margin:5px 0"><div id="ollamaBar" style="height:100%;width:0%;background:var(--primary);border-radius:5px;transition:width .4s"></div></div>
-          <div id="ollamaBarTxt"></div>
-        </div>
-        <div id="ollamaInstallWrap" style="display:none;margin-top:10px">
-          <button class="mini-btn" style="padding:8px 14px;font-size:12px" onclick="ollamaInstallGo()">🔧 Install Ollama (auto — winget/brew se)</button>
-          <div class="set-hint" id="ollamaInstallProg" style="display:none;color:#d97706"></div>
-          <div class="set-hint">Ya khud: <b>ollama.com</b> → download → install → phir yahan Refresh. (Ollama 100% FREE hai, koi API key nahi chahiye)</div>
-        </div>
+        <div class="set-label">Ollama Model (laptop pe installed)</div>
+        <select id="setOllamaModel" class="set-input" onchange="ollamaSel()"><option value="">⏳ Refresh dabao — models check ho rahe hain…</option></select>
+        <div class="set-hint" id="ollamaSelMsg" style="display:none;color:#14a878;margin-top:4px"></div>
+        <div class="set-hint" style="margin-top:10px">📦 <b>Naya model?</b> Khud install karo — terminal mein: <b>ollama pull llama3.2</b> (ya koi bhi model) → phir yahan <b>🔄 Refresh</b> dabao, model dropdown mein aa jayega.<br>Ollama app hi nahi hai to <b>ollama.com/download</b> se khud install karo. (100% FREE, koi API key nahi)</div>
       </div>
       <div class="set-actions">
         <div style="border-top:1px solid #e5e7eb;padding-top:12px;margin-top:10px">
@@ -286,59 +269,29 @@
     b.title = settings.jarvis ? 'Jarvis Mode ACTIVE — robot-style responses' : 'Jarvis Mode';
   }
   (function() { const b = document.getElementById('jarvisBtn'); if (settings.jarvis) b.classList.add('on'); })();
-  let _ollamaIv = null;
-  async function ollamaRefresh() {
-    const st = document.getElementById('ollamaStatus'); const sel = document.getElementById('setOllamaModel'); const iw = document.getElementById('ollamaInstallWrap');
+  async function ollamaRefresh(manual) {
+    const st = document.getElementById('ollamaStatus'); const sel = document.getElementById('setOllamaModel');
+    if (!st || !sel) return;
+    if (manual) { st.style.color = 'var(--text-muted)'; st.textContent = '🔄 Ollama models check ho rahe hain…'; }
     try {
       const d = await (await fetch('/api/models')).json();
-      if (iw) iw.style.display = d.installed || d.running ? 'none' : 'block';
-      const active = d.active_model || settings.ollama_model || (d.models && d.models[0]) || 'llama3.2';
-      if (d.models && d.models.length) {
+      const active = d.active_model || settings.ollama_model || (d.models && d.models[0]) || '';
+      if (d.running && d.models && d.models.length) {
         sel.innerHTML = d.models.map(m => '<option value="' + m + '"' + (m === active ? ' selected' : '') + '>' + m + '</option>').join('');
-        st.innerHTML = '✅ <b>Ollama chal raha</b> — ' + d.models.length + ' model' + (d.models.length > 1 ? 's' : '') + ' ready (' + active + ' active)';
-      } else if (d.installed) st.innerHTML = '⚠️ Ollama mila lekin server start nahi — "Refresh" dabao (app khud start karta hai) ya Ollama app kholo';
-      else st.innerHTML = '❌ <b>Ollama install nahi</b> — neeche "Install Ollama (auto)" dabao ya ollama.com';
-    } catch (e) { st.textContent = '❌ Check fail: ' + e.message; }
+        st.style.color = ''; st.innerHTML = '✅ <b>Ollama chal raha</b> — ' + d.models.length + ' model' + (d.models.length > 1 ? 's' : '') + ' mil gayi (' + active + ' active). Dropdown se koi bhi chuno.';
+      } else if (d.installed) { sel.innerHTML = '<option value="">koi model nahi mili</option>'; st.style.color = '#d97706'; st.innerHTML = '⚠️ Ollama chal raha hai lekin <b>koi model installed nahi</b> — terminal mein khud chalao: <b>ollama pull llama3.2</b>, phir 🔄 Refresh.'; }
+      else { sel.innerHTML = '<option value="">Ollama nahi mila</option>'; st.style.color = '#e11d48'; st.innerHTML = '❌ <b>Ollama install nahi</b> — khud install karo: <b>ollama.com/download</b> → phir 🔄 Refresh dabao.'; }
+    } catch (e) { st.style.color = '#e11d48'; st.textContent = '❌ Check fail: ' + e.message; }
   }
-  async function ollamaInstallGo() {
-    const prog = document.getElementById('ollamaInstallProg'); prog.style.display = 'block'; prog.textContent = '🔧 Ollama install ho raha hai… (2-10 min, internet speed pe)';
+  async function ollamaSel() {
+    const sel = document.getElementById('setOllamaModel'); const msg = document.getElementById('ollamaSelMsg');
+    const m = sel.value; if (!m) return;
     try {
-      const r = await fetch('/api/ollama/install', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const r = await fetch('/api/ollama/select', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) });
       const d = await r.json();
-      if (!d.ok) { prog.textContent = '❌ ' + (d.error || 'fail') + ' — khud install karo: ollama.com/download'; return; }
-      const iv = setInterval(async () => {
-        try {
-          const s = await (await fetch('/api/ollama/install_status')).json();
-          if (s.error) { prog.textContent = '❌ ' + s.error + ' — khud install karo: ollama.com/download'; clearInterval(iv); return; }
-          prog.textContent = '🔧 Installing… ' + (s.log || '').split(/[\r\n]+/).filter(Boolean).slice(-1)[0] || '';
-          if (s.done && !s.running) { clearInterval(iv); prog.textContent = '✅ Ollama install ho gaya! Server start hota hai…'; setTimeout(ollamaRefresh, 3000); }
-        } catch (e) {}
-      }, 3000);
-    } catch (e) { prog.textContent = '❌ ' + e.message; }
-  }
-  function ollamaQuick(btn, m) { document.getElementById('ollamaPullModel').value = m; }
-  async function ollamaPullGo() {
-    const m = (document.getElementById('ollamaPullModel').value || 'llama3.2').trim();
-    const prog = document.getElementById('ollamaPullProg'); prog.style.display = 'block';
-    document.getElementById('ollamaBar').style.width = '0%'; document.getElementById('ollamaBarTxt').textContent = '⬇️ ' + m + ' shuru…';
-    try {
-      const r = await fetch('/api/ollama/pull', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ model: m }) });
-      const d = await r.json();
-      if (!d.ok) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + d.error; return; }
-      if (d.already) { document.getElementById('ollamaBar').style.width = '100%'; document.getElementById('ollamaBarTxt').textContent = '✅ ' + m + ' already installed!'; ollamaRefresh(); return; }
-      if (_ollamaIv) clearInterval(_ollamaIv);
-      _ollamaIv = setInterval(async () => {
-        try {
-          const s = await (await fetch('/api/ollama/pull_status')).json();
-          const st = s.state;
-          if (st && st.error) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + st.error; clearInterval(_ollamaIv); _ollamaIv = null; return; }
-          const pct = st ? st.pct : 0; const stat = st ? st.status : '';
-          document.getElementById('ollamaBar').style.width = pct + '%';
-          document.getElementById('ollamaBarTxt').textContent = '⬇️ ' + m + ': ' + pct + '% — ' + stat + ' (chhota model ~2GB, speed pe depend)';
-          if (st && st.done) { clearInterval(_ollamaIv); _ollamaIv = null; document.getElementById('ollamaBar').style.width = '100%'; document.getElementById('ollamaBarTxt').textContent = '✅ ' + m + ' download complete! Model list mein aa gaya.'; ollamaRefresh(); }
-        } catch (e) {}
-      }, 2000);
-    } catch (e) { document.getElementById('ollamaBarTxt').textContent = '❌ ' + e.message; }
+      if (d.ok) { settings.ollama_model = m; saveSettings(); msg.style.display = 'block'; msg.textContent = '✅ Active model: ' + m + ' — ab chat karo'; setTimeout(() => msg.style.display = 'none', 4000); }
+      else { msg.style.display = 'block'; msg.style.color = '#e11d48'; msg.textContent = '❌ ' + (d.error || 'select fail'); }
+    } catch (e) { msg.style.display = 'block'; msg.style.color = '#e11d48'; msg.textContent = '❌ ' + e.message; }
   }
   const AI_INFO = {
     gemini: { hint: '✨ FREE — key yahan se: <b>aistudio.google.com/apikey</b>' },
@@ -366,7 +319,7 @@
       document.getElementById('keyHint').innerHTML = AI_INFO[p].hint + ' — key sirf tumhare PC pe save hoti hai ✅';
     }
   }
-  (async function(){ try { const r = await fetch('/api/sysinfo'); const d = await r.json(); const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.25 · ' + d.node + ' · ' + d.platform; } catch(e){ const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.25'; } })();
+  (async function(){ try { const r = await fetch('/api/sysinfo'); const d = await r.json(); const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.26 · ' + d.node + ' · ' + d.platform; } catch(e){ const b = document.getElementById('sysBadge'); if (b) b.textContent = 'v1.26'; } })();
   async function cloudKeyNow() {
     const pass = prompt('Passphrase likho (Noora ke chat mein diya gaya hai):');
     if (!pass) return;
